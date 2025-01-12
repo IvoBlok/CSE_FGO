@@ -9,12 +9,12 @@
 
 float LeonardJonespotential(float distance) {
     // using 'reduced' units, the LJ potential is simply:
-    return std::pow(distance, -12) - 2 * std::pow(distance, -6);
+    return 4.f * (std::pow(distance, -12) - std::pow(distance, -6));
 }
 
 float LeonardJonesSquaredPotential(float squaredDistance) {
     // defines the LJ potential based on a squared distance input. It saves some computation
-    return std::pow(squaredDistance, -6) - 2 * std::pow(squaredDistance, -3);
+    return 4.f * (std::pow(squaredDistance, -6) - std::pow(squaredDistance, -3));
 }
 
 FuzzyGlobalOptimizer::FuzzyGlobalOptimizer(int numberOfAtoms, float discreteGridSteps, float discreteCutoffDistance, float realLOGradientStep) 
@@ -51,13 +51,15 @@ FuzzyGlobalOptimizer::FuzzyGlobalOptimizer(int numberOfAtoms, float discreteGrid
 void FuzzyGlobalOptimizer::runFGO() {
 
     // TESTING: 
+    /*
     currentCluster = DiscreteCluster(numberOfAtoms);
     generateInitialCluster(currentCluster, spawningRadius);
 
     ContinuousCluster continuousCluster = ContinuousCluster(currentCluster, discreteGridSteps);
     localRealOptimization(continuousCluster);
     lowestEnergyFound = continuousCluster.getClusterEnergy(LeonardJonesSquaredPotential);
-    /*
+    */
+
     // ===============================================
     // STEP 1: create initial cluster
 
@@ -101,7 +103,6 @@ void FuzzyGlobalOptimizer::runFGO() {
     }
     std::cout << "E_opt_bef: " << lowestEnergyFound << " E_opt_aft: " << newLowestEnergy << "\n";
     lowestEnergyFound = newLowestEnergy;    
-    */
     // ===============================================
     // STEP 5: Surface Monte Carlo (SMC). mainly important for larger clusters (>100)
     // TODO SMC
@@ -264,7 +265,7 @@ void FuzzyGlobalOptimizer::localRealOptimization(ContinuousCluster& cluster) {
                     distance = std::sqrt(distanceSquared);
 
                     direction = cluster.getPoint(i) - cluster.getPoint(j);
-                    direction = (direction * (1.f / distance)) * (-12.f * (std::pow(distance, -13) - std::pow(distance, -7)));
+                    direction = (direction * (1.f / distance)) * (-24.f * (2.f * std::pow(distance, -13) - std::pow(distance, -7)));
                     //direction = (direction * (1.f / distance)) * std::fmax(-100.f, (-12.f * (std::pow(distance, -13) - std::pow(distance, -7))));
                     //direction = direction * (-12.f * (std::pow(distanceSquared, -7) - std::pow(distanceSquared, -4)));
                     gradient[i] = gradient[i] + direction;
