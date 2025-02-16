@@ -7,6 +7,23 @@
 #include <random>
 #include <algorithm>
 
+float LeonardJonespotential(float distance) {
+    if(distance = 0.f)
+        return std::numeric_limits<float>::infinity();
+
+    // using 'reduced' units, the LJ potential is simply:
+    return 4.f * (std::pow(distance, -12) - std::pow(distance, -6));
+}
+
+float LeonardJonesSquaredPotential(float squaredDistance) {
+    if(squaredDistance < 0.002f)
+        return std::numeric_limits<float>::infinity();
+
+    // defines the LJ potential based on a squared distance input. It saves some computation
+    return 4.f * (std::pow(squaredDistance, -6) - std::pow(squaredDistance, -3));
+}
+
+
 ContinuousPoint::ContinuousPoint(float x, float y, float z) : x(x), y(y), z(z) { }
 
 ContinuousPoint::ContinuousPoint(float x) : x(x), y(x), z(x) { }
@@ -95,11 +112,11 @@ int DiscretePoint::lengthSquared() {
 
 
 
-DiscreteCluster::DiscreteCluster(int numberOfPoints) : numberOfPoints(numberOfPoints) { 
+DiscreteCluster::DiscreteCluster(float gridStepSizeSquared, int numberOfPoints) : gridStepSizeSquared(gridStepSizeSquared), numberOfPoints(numberOfPoints) { 
     data = new DiscretePoint[numberOfPoints];
 }
 
-DiscreteCluster::DiscreteCluster(const DiscreteCluster& other) : numberOfPoints(other.numberOfPoints), data(new DiscretePoint[other.numberOfPoints]) {
+DiscreteCluster::DiscreteCluster(const DiscreteCluster& other) : gridStepSizeSquared(other.gridStepSizeSquared), numberOfPoints(other.numberOfPoints), data(new DiscretePoint[other.numberOfPoints]) {
     for (int i = 0; i < numberOfPoints; i++)
     {
         data[i] = other.data[i];
@@ -111,6 +128,7 @@ DiscreteCluster& DiscreteCluster::operator=(const DiscreteCluster& other) {
 
     delete[] data;
 
+    gridStepSizeSquared = other.gridStepSizeSquared;
     numberOfPoints = other.numberOfPoints;
     data = new DiscretePoint[numberOfPoints];
     for (int i = 0; i < numberOfPoints; i++)
@@ -121,9 +139,8 @@ DiscreteCluster& DiscreteCluster::operator=(const DiscreteCluster& other) {
     return *this;
 }
 
-DiscreteCluster::DiscreteCluster(DiscreteCluster&& other) noexcept : numberOfPoints(other.numberOfPoints), data(other.data) {
+DiscreteCluster::DiscreteCluster(DiscreteCluster&& other) noexcept : gridStepSizeSquared(other.gridStepSizeSquared), numberOfPoints(other.numberOfPoints), data(other.data) {
     other.data = nullptr;
-    other.numberOfPoints = 0;
 }
 
 DiscreteCluster& DiscreteCluster::operator=(DiscreteCluster&& other) noexcept {
@@ -131,6 +148,7 @@ DiscreteCluster& DiscreteCluster::operator=(DiscreteCluster&& other) noexcept {
 
     delete[] data;
 
+    gridStepSizeSquared = other.gridStepSizeSquared;
     numberOfPoints = other.numberOfPoints;
     data = other.data;
     other.data = nullptr;
@@ -165,7 +183,7 @@ int DiscreteCluster::getDistanceSquared(int atomIndex1, int atomIndex2) {
     return delta.lengthSquared();
 }
 
-float DiscreteCluster::getAtomEnergy(float* LJLookup, int atomIndex) {
+float DiscreteCluster::getAtomEnergy(int atomIndex) {
     int squaredDistance;
     float result = 0.f;
 
@@ -173,13 +191,13 @@ float DiscreteCluster::getAtomEnergy(float* LJLookup, int atomIndex) {
     {   
         if(atomIndex != j) {
             squaredDistance = getDistanceSquared(atomIndex, j);
-            result += LJLookup[squaredDistance];
+            result += LeonardJonesSquaredPotential(squaredDistance * gridStepSizeSquared);
         }
     }
     return result;
 }
 
-float DiscreteCluster::getAtomEnergy(float* LJLookup, int atomIndex, std::vector<int> atomsToConsider) {
+float DiscreteCluster::getAtomEnergy(int atomIndex, std::vector<int> atomsToConsider) {
     int squaredDistance;
     float result = 0.f;
 
@@ -187,24 +205,23 @@ float DiscreteCluster::getAtomEnergy(float* LJLookup, int atomIndex, std::vector
     {
         if(atomIndex != atomsToConsider[j]) {
             squaredDistance = getDistanceSquared(atomIndex, atomsToConsider[j]);
-            result += LJLookup[squaredDistance];
+            result += LeonardJonesSquaredPotential(squaredDistance * gridStepSizeSquared);
         }
     }
     return result;
 }
 
-float DiscreteCluster::getClusterEnergy(float* LJLookup) {
+float DiscreteCluster::getClusterEnergy() {
     float result = 0.f;
 
     for (int i = 0; i < numberOfPoints; i++)
-        result += getAtomEnergy(LJLookup, i);
+        result += getAtomEnergy(i);
 
     return result * 0.5f;    
 }
 
 std::vector<int> DiscreteCluster::getAtomNeighbours(int atomIndex, int cutoffDistanceSquared) {
     std::vector<int> neighbours;
-    neighbours.reserve(numberOfPoints);
 
     for (size_t i = 0; i < numberOfPoints; i++) {
     if ((float)getDistanceSquared(atomIndex, i) < cutoffDistanceSquared)
@@ -221,7 +238,7 @@ void DiscreteCluster::copyInto(DiscreteCluster& otherCluster) {
     std::memcpy(otherCluster.data, data, sizeof(DiscretePoint) * numberOfPoints);
 }
 
-void DiscreteCluster::writeClusterToFile(float* LJLookup, const std::string& filename) {
+void DiscreteCluster::writeClusterToFile(const std::string& filename) {
     std::ofstream outFile(filename);
 
     // Header line
@@ -229,14 +246,14 @@ void DiscreteCluster::writeClusterToFile(float* LJLookup, const std::string& fil
     outFile << "::X::Y::Z;\n";
 
     // Write points
-    for (size_t i = 0; i < numberOfPoints; i++) 
+    for (int i = 0; i < numberOfPoints; i++) 
     {
         outFile << "Point A " << i << "::"
                 << std::fixed << std::setprecision(2) 
                 << data[i].x/5.f << "::"
                 << data[i].y/5.f << "::" 
                 << data[i].z/5.f << "::"
-                << std::clamp(((int)getAtomEnergy(LJLookup, (int)i) - 1) * 50 + 100, 0, 255) << "::" // Example value for the 5th field
+                << std::clamp(((int)getAtomEnergy(i) - 1) * 50 + 100, 0, 255) << "::" // Example value for the 5th field
                 << "40::A::1::0::0::1::0;\n"; // Static additional fields
     }
 
@@ -376,8 +393,6 @@ void ContinuousCluster::copyInto(ContinuousCluster& otherCluster) {
 
 void ContinuousCluster::writeClusterToFile(const std::string& filename) {
     std::ofstream outFile(filename);
-
-    // Header line
     // Write points
     for (size_t i = 0; i < numberOfPoints; i++) 
     {

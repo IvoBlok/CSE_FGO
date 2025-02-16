@@ -9,6 +9,12 @@
 #include <string>
 #include <functional>
 
+
+float LeonardJonespotential(float distance);
+
+float LeonardJonesSquaredPotential(float squaredDistance);
+
+
 struct DiscretePoint {
     int x;
     int y;
@@ -32,8 +38,9 @@ struct DiscretePoint {
 struct DiscreteCluster {
     DiscretePoint* data;
     int numberOfPoints;
+    float gridStepSizeSquared;
 
-    DiscreteCluster(int numberOfPoints = 0);
+    DiscreteCluster(float gridStepSizeSquared = 0.f, int numberOfPoints = 0);
     
     ~DiscreteCluster();
 
@@ -50,16 +57,16 @@ struct DiscreteCluster {
 
     int getDistanceSquared(int atomIndex1, int atomIndex2);
 
-    float getAtomEnergy(float* LJLookup, int atomIndex);
-    float getAtomEnergy(float* LJLookup, int atomIndex, std::vector<int> atomsToConsider);
+    float getAtomEnergy(int atomIndex);
+    float getAtomEnergy(int atomIndex, std::vector<int> atomsToConsider);
 
-    float getClusterEnergy(float* LJLookup);
+    float getClusterEnergy();
 
     std::vector<int> getAtomNeighbours(int atomIndex, int cutoffDistanceSquared);
 
     void copyInto(DiscreteCluster& otherCluster);
 
-    void writeClusterToFile(float* LJLookup, const std::string& filename);
+    void writeClusterToFile(const std::string& filename);
 };
 
 

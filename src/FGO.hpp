@@ -10,9 +10,6 @@
 #include <vector>
 #include <string>
 
-float LeonardJonespotential(float distance);
-
-
 class FuzzyGlobalOptimizer {
 public:
     int numberOfAtoms;
@@ -20,8 +17,6 @@ public:
     float discreteCutoffDistance;
 
     float lowestEnergyFound;
-
-    float* LJPotentialsLookup;
 
     DiscreteCluster currentCluster;
     std::vector<DiscreteCluster> candidateClusters;
@@ -40,7 +35,8 @@ public:
 private: 
     void localDiscreteOptimization(DiscreteCluster& cluster);
 
-    void localDiscreteFrozenOptimization(DiscreteCluster& cluster, int nonFrozenAtom);
+    int localDiscreteFrozenOptimization(DiscreteCluster& cluster, int nonFrozenAtom);
+    int localDiscreteFrozenOptimization(DiscreteCluster& cluster, int nonFrozenAtom, std::vector<int>& neighbours);
 
     void localRealOptimization(ContinuousCluster& cluster);
 
