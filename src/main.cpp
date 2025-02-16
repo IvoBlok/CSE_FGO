@@ -156,6 +156,18 @@ float clusterBestEnergies[151] = {
 };
 
 int main(int argc, char **argv) {
+
+    std::vector<float> LJLookup;
+    int lookupElementCount = 3 * (int)std::pow(4 * (int)(2.1f / 0.02f), 2);
+    LJLookup.reserve(lookupElementCount);
+    
+    // to keep the code simple, here we just calculate the LJ potential for each integer up to the calculated max ( a max established to ensure all standard neighbours are close enough)
+    // TODO: since only the integers of the form: I1^2 + I2^2 + I3^2 occur, only those need to be computed 
+    // LJLookup consists of the Leonard-Jones potential at the squared distance given by the index in the lookup. In the calculation here we compensate for the grid spacing
+    for (int i = 0; i < lookupElementCount; i++)
+        LJLookup.emplace_back(LeonardJonesSquaredPotential(i*0.02f*0.02f));
+
+    
     for (int clusterSize = 2; clusterSize < 40; clusterSize++)
     {
         int sampleCount = 1000;
@@ -163,13 +175,13 @@ int main(int argc, char **argv) {
 
         for (int iter = 0; iter < sampleCount; iter++)
         {
-            FuzzyGlobalOptimizer FGO(clusterSize);
+            FuzzyGlobalOptimizer FGO(clusterSize, LJLookup);
             FGO.runFGO();
 
             if (std::abs(FGO.lowestEnergyFound - clusterBestEnergies[clusterSize]) < 0.001f)
                 successfullFinds++;
         }
-        std::cout << "N=" << clusterSize << " finds / attempt: " << successfullFinds << " / " << sampleCount << "\n";
+        std::cout << "N=" << clusterSize << " finds / attempts: " << successfullFinds << " / " << sampleCount << "\n";
     }
     
 

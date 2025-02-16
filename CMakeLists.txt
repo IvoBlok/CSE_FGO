@@ -21,8 +21,8 @@ add_executable(main
 
 # Set properties for debug executable
 set_target_properties(main_debug PROPERTIES
-    COMPILE_FLAGS "-g"        # Debug symbols
-    LINK_FLAGS "-g"           # Link with debug symbols
+    COMPILE_FLAGS "-g -pg"        # Debug symbols
+    LINK_FLAGS "-g -pg"           # Link with debug symbols
 )
 
 # Set properties for optimized executable

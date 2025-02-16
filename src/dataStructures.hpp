@@ -14,6 +14,7 @@ float LeonardJonespotential(float distance);
 
 float LeonardJonesSquaredPotential(float squaredDistance);
 
+float LeonardJonesDerivative(float distance);
 
 struct DiscretePoint {
     int x;
@@ -57,16 +58,14 @@ struct DiscreteCluster {
 
     int getDistanceSquared(int atomIndex1, int atomIndex2);
 
-    float getAtomEnergy(int atomIndex);
-    float getAtomEnergy(int atomIndex, std::vector<int> atomsToConsider);
+    float getAtomEnergy(const std::vector<float>& lookup, int atomIndex);
+    float getAtomEnergy(const std::vector<float>& lookup, int atomIndex, std::vector<int>& atomsToConsider);
 
-    float getClusterEnergy();
+    float getClusterEnergy(const std::vector<float>& lookup);
 
     std::vector<int> getAtomNeighbours(int atomIndex, int cutoffDistanceSquared);
 
     void copyInto(DiscreteCluster& otherCluster);
-
-    void writeClusterToFile(const std::string& filename);
 };
 
 
@@ -120,7 +119,7 @@ struct ContinuousCluster {
     float getDistanceSquared(int atomIndex1, int atomIndex2);
 
     float getAtomEnergy(std::function<float(float)> potentialSquared, int atomIndex);
-    float getAtomEnergy(std::function<float(float)> potentialSquared, int atomIndex, std::vector<int> atomsToConsider);
+    float getAtomEnergy(std::function<float(float)> potentialSquared, int atomIndex, std::vector<int>& atomsToConsider);
 
     float getClusterEnergy(std::function<float(float)> potentialSquared);
     

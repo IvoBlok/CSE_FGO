@@ -9,10 +9,12 @@
 #include <set>
 #include <vector>
 #include <string>
+#include <vector>
 
 class FuzzyGlobalOptimizer {
 public:
     int numberOfAtoms;
+
     float discreteGridSteps;
     float discreteCutoffDistance;
 
@@ -24,11 +26,12 @@ public:
 private:
     float spawningRadius;
     int discreteGridPointCount;
-    int maxGridSquaredDistance;
-    float realLOGradientStep;
+    float gradientStepSize;
+
+    const std::vector<float>& LJLookup;
 
 public:
-    FuzzyGlobalOptimizer(int numberOfAtoms, float discreteGridSteps = 0.02f, float discreteCutoffDistance = 2.1f, float realLOGradientStep = 0.001f);
+    FuzzyGlobalOptimizer(int numberOfAtoms, const std::vector<float>& LJLookup, float discreteGridSteps = 0.02f, float discreteCutoffDistance = 2.1f, float gradientStepSize = 0.001f);
 
     void runFGO();
 

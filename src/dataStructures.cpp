@@ -23,6 +23,9 @@ float LeonardJonesSquaredPotential(float squaredDistance) {
     return 4.f * (std::pow(squaredDistance, -6) - std::pow(squaredDistance, -3));
 }
 
+float LeonardJonesDerivative(float distance) {
+    return -24.f * (2.f * std::pow(distance, -13) - std::pow(distance, -7));
+}
 
 ContinuousPoint::ContinuousPoint(float x, float y, float z) : x(x), y(y), z(z) { }
 
@@ -183,7 +186,7 @@ int DiscreteCluster::getDistanceSquared(int atomIndex1, int atomIndex2) {
     return delta.lengthSquared();
 }
 
-float DiscreteCluster::getAtomEnergy(int atomIndex) {
+float DiscreteCluster::getAtomEnergy(const std::vector<float>& lookup, int atomIndex) {
     int squaredDistance;
     float result = 0.f;
 
@@ -191,13 +194,16 @@ float DiscreteCluster::getAtomEnergy(int atomIndex) {
     {   
         if(atomIndex != j) {
             squaredDistance = getDistanceSquared(atomIndex, j);
-            result += LeonardJonesSquaredPotential(squaredDistance * gridStepSizeSquared);
+            if(squaredDistance < lookup.size())
+                result += lookup[squaredDistance];
+            else 
+                result += LeonardJonesSquaredPotential(squaredDistance * gridStepSizeSquared);
         }
     }
     return result;
 }
 
-float DiscreteCluster::getAtomEnergy(int atomIndex, std::vector<int> atomsToConsider) {
+float DiscreteCluster::getAtomEnergy(const std::vector<float>& lookup, int atomIndex, std::vector<int>& atomsToConsider) {
     int squaredDistance;
     float result = 0.f;
 
@@ -205,17 +211,19 @@ float DiscreteCluster::getAtomEnergy(int atomIndex, std::vector<int> atomsToCons
     {
         if(atomIndex != atomsToConsider[j]) {
             squaredDistance = getDistanceSquared(atomIndex, atomsToConsider[j]);
-            result += LeonardJonesSquaredPotential(squaredDistance * gridStepSizeSquared);
-        }
+            if(squaredDistance < lookup.size())
+                result += lookup[squaredDistance];
+            else 
+                result += LeonardJonesSquaredPotential(squaredDistance * gridStepSizeSquared);        }
     }
     return result;
 }
 
-float DiscreteCluster::getClusterEnergy() {
+float DiscreteCluster::getClusterEnergy(const std::vector<float>& lookup) {
     float result = 0.f;
 
     for (int i = 0; i < numberOfPoints; i++)
-        result += getAtomEnergy(i);
+        result += getAtomEnergy(lookup, i);
 
     return result * 0.5f;    
 }
@@ -236,28 +244,6 @@ void DiscreteCluster::copyInto(DiscreteCluster& otherCluster) {
         otherCluster = DiscreteCluster(numberOfPoints);
 
     std::memcpy(otherCluster.data, data, sizeof(DiscretePoint) * numberOfPoints);
-}
-
-void DiscreteCluster::writeClusterToFile(const std::string& filename) {
-    std::ofstream outFile(filename);
-
-    // Header line
-    outFile << "Interactive 3D Scatter Plot;\n";
-    outFile << "::X::Y::Z;\n";
-
-    // Write points
-    for (int i = 0; i < numberOfPoints; i++) 
-    {
-        outFile << "Point A " << i << "::"
-                << std::fixed << std::setprecision(2) 
-                << data[i].x/5.f << "::"
-                << data[i].y/5.f << "::" 
-                << data[i].z/5.f << "::"
-                << std::clamp(((int)getAtomEnergy(i) - 1) * 50 + 100, 0, 255) << "::" // Example value for the 5th field
-                << "40::A::1::0::0::1::0;\n"; // Static additional fields
-    }
-
-    outFile.close();
 }
 
 
@@ -361,7 +347,7 @@ float ContinuousCluster::getAtomEnergy(std::function<float(float)> potentialSqua
     return result;
 }
 
-float ContinuousCluster::getAtomEnergy(std::function<float(float)> potentialSquared, int atomIndex, std::vector<int> atomsToConsider) {
+float ContinuousCluster::getAtomEnergy(std::function<float(float)> potentialSquared, int atomIndex, std::vector<int>& atomsToConsider) {
     float squaredDistance;
     float result = 0.f;
 
