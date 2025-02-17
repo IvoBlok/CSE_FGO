@@ -158,7 +158,7 @@ float clusterBestEnergies[151] = {
 int main(int argc, char **argv) {
 
     std::vector<float> LJLookup;
-    int lookupElementCount = 3 * (int)std::pow(4 * (int)(2.1f / 0.02f), 2);
+    int lookupElementCount = 3 * (int)std::pow(2 * (int)(2.1f / 0.02f), 2);
     LJLookup.reserve(lookupElementCount);
     
     // to keep the code simple, here we just calculate the LJ potential for each integer up to the calculated max ( a max established to ensure all standard neighbours are close enough)

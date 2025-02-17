@@ -112,7 +112,7 @@ struct ContinuousCluster {
     void setPoint(int atomIndex, float x, float y, float z);
     void setPoint(int atomIndex, ContinuousPoint& point);
 
-    void addToPoints(ContinuousPoint* points, float factor);
+    void addToPoints(std::vector<ContinuousPoint>& points, float factor);
 
     ContinuousPoint& getPoint(int atomIndex);
 

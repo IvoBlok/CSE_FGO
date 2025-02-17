@@ -210,7 +210,11 @@ void FuzzyGlobalOptimizer::localDiscreteOptimization(DiscreteCluster& cluster) {
 
 void FuzzyGlobalOptimizer::localRealOptimization(ContinuousCluster& cluster) {
     // gradient is initialized with 0 vector
-    ContinuousPoint* gradient = new ContinuousPoint[cluster.numberOfPoints];
+    std::vector<ContinuousPoint> gradient;
+    gradient.reserve(cluster.numberOfPoints);
+    for (int i = 0; i < cluster.numberOfPoints; i++)
+        gradient.emplace_back(ContinuousPoint(0.f, 0.f, 0.f));
+
     float distanceSquared;
     float distance;
     ContinuousPoint direction;
@@ -236,8 +240,6 @@ void FuzzyGlobalOptimizer::localRealOptimization(ContinuousCluster& cluster) {
 
                     direction = cluster.getPoint(i) - cluster.getPoint(j);
                     direction = (direction * (1.f / distance)) * LeonardJonesDerivative(distance);
-                    //direction = (direction * (1.f / distance)) * std::fmax(-100.f, (-12.f * (std::pow(distance, -13) - std::pow(distance, -7))));
-                    //direction = direction * (-12.f * (std::pow(distanceSquared, -7) - std::pow(distanceSquared, -4)));
                     gradient[i] = gradient[i] + direction;
                 }
             }

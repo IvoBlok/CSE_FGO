@@ -318,7 +318,7 @@ void ContinuousCluster::setPoint(int atomIndex, ContinuousPoint& point) {
     data[atomIndex].z = point.z;
 }
 
-void ContinuousCluster::addToPoints(ContinuousPoint* points, float factor) {
+void ContinuousCluster::addToPoints(std::vector<ContinuousPoint>& points, float factor) {
     for (int i = 0; i < numberOfPoints; i++) {
         data[i] = data[i] + points[i] * factor;
     }
