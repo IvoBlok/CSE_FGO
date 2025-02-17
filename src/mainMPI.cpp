@@ -1,6 +1,8 @@
 #include <iostream>
-#include "FGO.hpp"
+#include <fstream>
 #include <mpi.h>
+
+#include "FGO.hpp"
 
 float clusterBestEnergies[151] = {
     0.f,  // Placeholder for index 0 (no cluster with 0 atoms)
@@ -173,7 +175,16 @@ int main(int argc, char **argv) {
     for (int i = 0; i < lookupElementCount; i++)
         LJLookup.emplace_back(LeonardJonesSquaredPotential(i*0.02f*0.02f));
 
-    
+    // File to save results
+    std::ofstream outFile;
+    if (rank == 0) {
+        outFile.open("results.txt", std::ios::out); // Open file for writing
+        if (!outFile.is_open()) {
+            std::cerr << "Error: Could not open results.txt for writing!\n";
+            MPI_Abort(MPI_COMM_WORLD, 1); // Abort MPI if file cannot be opened
+        }
+    }
+
     for (int clusterSize = 2; clusterSize < 40; clusterSize++)
     {
         int sampleCount = 100;
@@ -196,15 +207,18 @@ int main(int argc, char **argv) {
             if (std::abs(FGO.lowestEnergyFound - clusterBestEnergies[clusterSize]) < 0.001f)
                 localSuccessfullFinds++;
         }
-        
+
         // Gather results from all processes
         int globalSuccessfullFinds = 0;
         MPI_Reduce(&localSuccessfullFinds, &globalSuccessfullFinds, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 
-        // Print results on rank 0
+        // Write results to file on rank 0
         if (rank == 0) {
-            std::cout << "N=" << clusterSize << " finds / attempts: " << globalSuccessfullFinds << " / " << sampleCount << "\n";
+            outFile << "N=" << clusterSize << " finds / attempts: " << globalSuccessfullFinds << " / " << sampleCount << "\n";
+            outFile.flush(); // Flush the buffer to ensure data is written to disk
         }
+
+        MPI_Barrier(MPI_COMM_WORLD);
     }
 
     // Finalize MPI

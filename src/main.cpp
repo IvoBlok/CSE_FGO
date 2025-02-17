@@ -168,7 +168,7 @@ int main(int argc, char **argv) {
         LJLookup.emplace_back(LeonardJonesSquaredPotential(i*0.02f*0.02f));
 
     
-    for (int clusterSize = 2; clusterSize < 40; clusterSize++)
+    for (int clusterSize = 40; clusterSize < 100; clusterSize++)
     {
         int sampleCount = 100;
         int successfullFinds = 0;
