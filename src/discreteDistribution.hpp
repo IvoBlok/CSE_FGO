@@ -19,6 +19,8 @@ private:
     std::vector<int> alias;
     std::vector<float> probabilities;
     int numberOfElements;
+    
+    std::vector<int> small, large;
 
     std::uniform_real_distribution<> uniformDistribution;
 };

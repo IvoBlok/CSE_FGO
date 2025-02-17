@@ -170,10 +170,11 @@ int main(int argc, char **argv) {
     
     for (int clusterSize = 2; clusterSize < 40; clusterSize++)
     {
-        int sampleCount = 1000;
+        int sampleCount = 100;
         int successfullFinds = 0;
+        int iter = 0;
 
-        for (int iter = 0; iter < sampleCount; iter++)
+        for (iter = 0; iter < sampleCount; iter++)
         {
             FuzzyGlobalOptimizer FGO(clusterSize, LJLookup);
             FGO.runFGO();
@@ -181,7 +182,7 @@ int main(int argc, char **argv) {
             if (std::abs(FGO.lowestEnergyFound - clusterBestEnergies[clusterSize]) < 0.001f)
                 successfullFinds++;
         }
-        std::cout << "N=" << clusterSize << " finds / attempts: " << successfullFinds << " / " << sampleCount << "\n";
+        std::cout << "N=" << clusterSize << " finds / attempts: " << successfullFinds << " / " << iter << "\n";
     }
     
 

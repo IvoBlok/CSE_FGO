@@ -35,5 +35,6 @@ N=18 finds / attempts: 783 / 1000
 
 TODO
 =========
+ - Improve performance by adjusting the 'DiscreteCluster::getAtomEnergy' and 'DiscreteCluster::getAtomNeighbours' implementations / number of calls
  - Improve memory handling by using std::vector instead of the 'new' allocators in the Discrete (and probably also Continuous) cluster structs. 
  - Investigate the drastically lower success percentage compared to the paper results

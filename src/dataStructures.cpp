@@ -203,7 +203,7 @@ float DiscreteCluster::getAtomEnergy(const std::vector<float>& lookup, int atomI
     return result;
 }
 
-float DiscreteCluster::getAtomEnergy(const std::vector<float>& lookup, int atomIndex, std::vector<int>& atomsToConsider) {
+float DiscreteCluster::getAtomEnergy(const std::vector<float>& lookup, int atomIndex, const std::vector<int>& atomsToConsider) {
     int squaredDistance;
     float result = 0.f;
 
@@ -230,6 +230,7 @@ float DiscreteCluster::getClusterEnergy(const std::vector<float>& lookup) {
 
 std::vector<int> DiscreteCluster::getAtomNeighbours(int atomIndex, int cutoffDistanceSquared) {
     std::vector<int> neighbours;
+    neighbours.reserve(100);
 
     for (size_t i = 0; i < numberOfPoints; i++) {
     if ((float)getDistanceSquared(atomIndex, i) < cutoffDistanceSquared)

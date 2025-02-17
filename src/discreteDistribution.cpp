@@ -9,6 +9,9 @@ DiscreteDistribution::DiscreteDistribution(int size) {
     std::vector<float> probabilities(numberOfElements);
     std::vector<int> alias(numberOfElements);
     
+    small.reserve(numberOfElements);
+    large.reserve(numberOfElements);
+
     this->probabilities = std::move(probabilities);
     this->alias = std::move(alias);
 }
@@ -36,10 +39,9 @@ void DiscreteDistribution::updateDistribution(std::vector<float>& weights) {
     for (int i = 0; i < numberOfElements; i++) probabilities[i] = weights[i] * numberOfElements / sum;
 
     // create alias table
-    std::vector<int> small, large;
     for (int i = 0; i < numberOfElements; i++) {
-        if (probabilities[i] < 1.f) small.push_back(i);
-        else large.push_back(i);
+        if (probabilities[i] < 1.f) small.emplace_back(i);
+        else large.emplace_back(i);
     }
 
     while(!small.empty() && !large.empty()) {
@@ -50,8 +52,8 @@ void DiscreteDistribution::updateDistribution(std::vector<float>& weights) {
         alias[s] = l;
         probabilities[l] = probabilities[l] + probabilities[s] - 1.f;
 
-        if (probabilities[l] < 1.f) small.push_back(l);
-        else large.push_back(l);
+        if (probabilities[l] < 1.f) small.emplace_back(l);
+        else large.emplace_back(l);
     }
 }
 

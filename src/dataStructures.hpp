@@ -59,7 +59,7 @@ struct DiscreteCluster {
     int getDistanceSquared(int atomIndex1, int atomIndex2);
 
     float getAtomEnergy(const std::vector<float>& lookup, int atomIndex);
-    float getAtomEnergy(const std::vector<float>& lookup, int atomIndex, std::vector<int>& atomsToConsider);
+    float getAtomEnergy(const std::vector<float>& lookup, int atomIndex, const std::vector<int>& atomsToConsider);
 
     float getClusterEnergy(const std::vector<float>& lookup);
 
