@@ -27,7 +27,7 @@ FuzzyGlobalOptimizer::FuzzyGlobalOptimizer(int numberOfAtoms, const std::vector<
     distTheta = std::uniform_real_distribution<>(0.0, 2.f * M_PI); // Azimuthal angle
     distPhi = std::uniform_real_distribution<>(0.0, M_PI);     // Polar angle
 
-
+    discreteDistribution = DiscreteDistribution{numberOfAtoms};
 }
 
 void FuzzyGlobalOptimizer::runFGO() {
@@ -76,11 +76,6 @@ void FuzzyGlobalOptimizer::runFGO() {
 }
 
 void FuzzyGlobalOptimizer::discreteMonteCarlo(float activeEnergy, float targetEnergy, float targetSigma, float acceptanceEnergy, float convergenceFactor) {
-    std::random_device rd;
-    std::mt19937 generator(rd());
-
-    std::uniform_real_distribution<float> distribution(0.f, 1.f);
-
     int lastSinceImprovement = 0;
     int iteration = 0;
 
@@ -121,7 +116,7 @@ void FuzzyGlobalOptimizer::discreteMonteCarlo(float activeEnergy, float targetEn
         // if the local energy of the moved atom improved, we directly accept the new candidate
         float deltaLocalAtomEnergy = candidateCluster.getAtomEnergy(LJLookup, activeAtom) - atomEnergies[activeAtom];
 
-        float randomExpAcceptanceThreshold = distribution(generator);
+        float randomExpAcceptanceThreshold = dist(gen);
 
         if(deltaLocalAtomEnergy < 0.f || randomExpAcceptanceThreshold < std::exp(-deltaLocalAtomEnergy/acceptanceEnergy)) {
             
@@ -276,9 +271,9 @@ void FuzzyGlobalOptimizer::localRealOptimization(ContinuousCluster& cluster) {
 }
 
 int FuzzyGlobalOptimizer::getRandomAtomByWeights(std::vector<float>& atomWeights) {
-    DMCDiscreteDistribution.param(std::discrete_distribution<>::param_type(atomWeights.begin(), atomWeights.end()));
+    discreteDistribution.updateDistribution(atomWeights);
 
-    return DMCDiscreteDistribution(gen);
+    return discreteDistribution.generate(gen);
 }
 
 DiscretePoint FuzzyGlobalOptimizer::generateUniformRandomPointInSphere(float radius, DiscretePoint center, bool allowZero = true) {

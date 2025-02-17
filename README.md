@@ -36,5 +36,4 @@ N=18 finds / attempts: 783 / 1000
 TODO
 =========
  - Improve memory handling by using std::vector instead of the 'new' allocators in the Discrete (and probably also Continuous) cluster structs. 
- - Improve random generation performance further, by potentially swithing out the std::discrete_distribution with something like the 'Alias method' for better performance in the our conditions where we construct a new distribution for each evaluation
  - Investigate the drastically lower success percentage compared to the paper results

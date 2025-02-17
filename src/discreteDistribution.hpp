@@ -3,18 +3,24 @@
 
 #include <vector>
 #include <random>
+#include <stdexcept>
 
 class DiscreteDistribution {
 public:
     DiscreteDistribution();
-    ~DiscreteDistribution();
-    
-    void updateDistribution(std::vector<double>& weights);
+    DiscreteDistribution(int size);
+    DiscreteDistribution(std::vector<float>& weights);
 
-    int generate(std::minstd_rand0& gen) const;
+    void updateDistribution(std::vector<float>& weights);
+
+    int generate(std::minstd_rand0& gen);
 
 private:
+    std::vector<int> alias;
+    std::vector<float> probabilities;
+    int numberOfElements;
 
+    std::uniform_real_distribution<> uniformDistribution;
 };
 
 #endif

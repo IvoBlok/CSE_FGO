@@ -2,6 +2,7 @@
 #define FUZZY_GLOBAL_OPTIMIZER_H
 
 #include "dataStructures.hpp"
+#include "discreteDistribution.hpp"
 
 #include <iostream>
 #include <cmath>
@@ -36,7 +37,7 @@ private:
     std::uniform_real_distribution<> distTheta; // Azimuthal angle
     std::uniform_real_distribution<> distPhi;     // Polar angle
 
-    std::discrete_distribution<int> DMCDiscreteDistribution;
+    DiscreteDistribution discreteDistribution;
 
 public:
     FuzzyGlobalOptimizer(int numberOfAtoms, const std::vector<float>& LJLookup, float discreteGridSteps = 0.02f, float discreteCutoffDistance = 2.1f, float gradientStepSize = 0.001f);

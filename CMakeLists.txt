@@ -10,6 +10,7 @@ add_executable(main_debug
     src/main.cpp
     src/FGO.cpp
     src/dataStructures.cpp
+    src/discreteDistribution.cpp
 )
 
 # Add optimized executable
@@ -17,6 +18,7 @@ add_executable(main
     src/main.cpp
     src/FGO.cpp
     src/dataStructures.cpp
+    src/discreteDistribution.cpp
 )
 
 # Set properties for debug executable
