@@ -21,6 +21,13 @@ FuzzyGlobalOptimizer::FuzzyGlobalOptimizer(int numberOfAtoms, const std::vector<
     // calculate initial cluster spawning radius, i.e. in what sphere of volume the atoms are 'spawned'
     spawningRadius = 0.4f * std::pow(numberOfAtoms, 0.333f);
     
+    // sphere based random point generation initialization
+    gen = std::minstd_rand0(rd());
+    dist = std::uniform_real_distribution<>(0.0, 1.0);         // For uniform sampling
+    distTheta = std::uniform_real_distribution<>(0.0, 2.f * M_PI); // Azimuthal angle
+    distPhi = std::uniform_real_distribution<>(0.0, M_PI);     // Polar angle
+
+
 }
 
 void FuzzyGlobalOptimizer::runFGO() {
@@ -83,10 +90,11 @@ void FuzzyGlobalOptimizer::discreteMonteCarlo(float activeEnergy, float targetEn
     {
         iteration++;
         // calculate individual atom energy for each atom in the cluster
-        float* atomEnergies = new float[numberOfAtoms];
+        std::vector<float> atomEnergies;
+        atomEnergies.reserve(numberOfAtoms);
 
         for (int i = 0; i < numberOfAtoms; i++)
-            atomEnergies[i] = currentCluster.getAtomEnergy(LJLookup, i);
+            atomEnergies.emplace_back(currentCluster.getAtomEnergy(LJLookup, i));
 
         // calculate probabilities of the atoms being chosen as active or as target
         std::vector<float> atomActiveWeights;
@@ -266,19 +274,12 @@ void FuzzyGlobalOptimizer::localRealOptimization(ContinuousCluster& cluster) {
 }
 
 int FuzzyGlobalOptimizer::getRandomAtomByWeights(std::vector<float>& atomWeights) {
-    std::default_random_engine generator;
-    std::discrete_distribution<int> distribution(atomWeights.begin(), atomWeights.end());
+    DMCDiscreteDistribution.param(std::discrete_distribution<>::param_type(atomWeights.begin(), atomWeights.end()));
 
-    return distribution(generator);
+    return DMCDiscreteDistribution(gen);
 }
 
 DiscretePoint FuzzyGlobalOptimizer::generateUniformRandomPointInSphere(float radius, DiscretePoint center, bool allowZero = true) {
-
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_real_distribution<> dist(0.0, 1.0);         // For uniform sampling
-    std::uniform_real_distribution<> distTheta(0.0, 2.f * M_PI); // Azimuthal angle
-    std::uniform_real_distribution<> distPhi(0.0, M_PI);     // Polar angle
 
     float u, theta, phi, r;
     int x, y, z;

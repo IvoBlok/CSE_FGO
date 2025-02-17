@@ -30,6 +30,14 @@ private:
 
     const std::vector<float>& LJLookup;
 
+    std::random_device rd;
+    std::minstd_rand0 gen;
+    std::uniform_real_distribution<> dist;         // For uniform sampling
+    std::uniform_real_distribution<> distTheta; // Azimuthal angle
+    std::uniform_real_distribution<> distPhi;     // Polar angle
+
+    std::discrete_distribution<int> DMCDiscreteDistribution;
+
 public:
     FuzzyGlobalOptimizer(int numberOfAtoms, const std::vector<float>& LJLookup, float discreteGridSteps = 0.02f, float discreteCutoffDistance = 2.1f, float gradientStepSize = 0.001f);
 

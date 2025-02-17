@@ -32,5 +32,5 @@ N=15 finds / attempt: 587 / 1000
 
 TODO
 =========
- - Improve performance further, by fixing 'getRandomAtomByWeights' and 'generateUniformRandomPointInSphere'. 'getAtomEnergy' still seems to take up +-45% of the computational time, so further improvement is probably possible there.
+ - Improve random generation performance further, by potentially swithing out the std::discrete_distribution with something like the 'Alias method' for better performance in the our conditions where we construct a new distribution for each evaluation
  - Investigate the drastically lower success percentage compared to the paper results
