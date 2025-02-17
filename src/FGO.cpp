@@ -36,6 +36,7 @@ void FuzzyGlobalOptimizer::runFGO() {
     currentCluster = DiscreteCluster{discreteGridSteps*discreteGridSteps, numberOfAtoms};
     generateInitialCluster(currentCluster, spawningRadius);
     localDiscreteOptimization(currentCluster);
+    lowestEnergyFound = currentCluster.getClusterEnergy(LJLookup);
 
     // ===============================================
     // STEP 2: run first rough DMC layer, with experimentally determined hyperparameters as inputs
@@ -67,7 +68,7 @@ void FuzzyGlobalOptimizer::runFGO() {
     {   
         float energy = goodCandidates[i].getClusterEnergy(LeonardJonesSquaredPotential);
         if (energy < lowestEnergyFound)
-        lowestEnergyFound = energy;
+            lowestEnergyFound = energy;
     }
 
     // ===============================================
@@ -77,31 +78,22 @@ void FuzzyGlobalOptimizer::runFGO() {
 
 void FuzzyGlobalOptimizer::discreteMonteCarlo(float activeEnergy, float targetEnergy, float targetSigma, float acceptanceEnergy, float convergenceFactor) {
     int lastSinceImprovement = 0;
-    int iteration = 0;
 
     DiscreteCluster candidateCluster{discreteGridSteps*discreteGridSteps, numberOfAtoms};
 
+    std::vector<float> atomEnergies(numberOfAtoms);
+    std::vector<float> atomActiveWeights(numberOfAtoms);
+    std::vector<float> atomTargetWeights(numberOfAtoms);
+
     while (lastSinceImprovement < (int)(numberOfAtoms*numberOfAtoms*convergenceFactor))
     {
-        iteration++;
-        // calculate individual atom energy for each atom in the cluster
-        std::vector<float> atomEnergies;
-        atomEnergies.reserve(numberOfAtoms);
+        for (int i = 0; i < numberOfAtoms; i++) {
+            atomEnergies[i] = currentCluster.getAtomEnergy(LJLookup, i);
 
-        for (int i = 0; i < numberOfAtoms; i++)
-            atomEnergies.emplace_back(currentCluster.getAtomEnergy(LJLookup, i));
-
-        // calculate probabilities of the atoms being chosen as active or as target
-        std::vector<float> atomActiveWeights;
-        std::vector<float> atomTargetWeights;
-
-        for (int i = 0; i < numberOfAtoms; i++)
-        {
-            atomActiveWeights.emplace_back(std::exp(atomEnergies[i]/activeEnergy));
-            atomTargetWeights.emplace_back(std::exp(-std::pow(atomEnergies[i] - targetEnergy, 2)/(2*std::pow(targetSigma, 2))));
+            atomActiveWeights[i] = std::exp(atomEnergies[i]/activeEnergy);
+            atomTargetWeights[i] = std::exp(-std::pow(atomEnergies[i] - targetEnergy, 2)/(2*std::pow(targetSigma, 2)));
         }
 
-        // get an active and target atom
         int activeAtom = getRandomAtomByWeights(atomActiveWeights);
         int targetAtom = getRandomAtomByWeights(atomTargetWeights);
 

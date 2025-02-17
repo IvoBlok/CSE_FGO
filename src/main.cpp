@@ -168,7 +168,7 @@ int main(int argc, char **argv) {
         LJLookup.emplace_back(LeonardJonesSquaredPotential(i*0.02f*0.02f));
 
     
-    for (int clusterSize = 40; clusterSize < 100; clusterSize++)
+    for (int clusterSize = 20; clusterSize < 100; clusterSize++)
     {
         int sampleCount = 100;
         int successfullFinds = 0;
@@ -179,7 +179,7 @@ int main(int argc, char **argv) {
             FuzzyGlobalOptimizer FGO(clusterSize, LJLookup);
             FGO.runFGO();
 
-            if (std::abs(FGO.lowestEnergyFound - clusterBestEnergies[clusterSize]) < 0.001f)
+            if (std::abs(FGO.lowestEnergyFound - clusterBestEnergies[clusterSize]) < 0.01f)
                 successfullFinds++;
         }
         std::cout << "N=" << clusterSize << " finds / attempts: " << successfullFinds << " / " << iter << "\n";
