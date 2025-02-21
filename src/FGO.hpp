@@ -19,7 +19,8 @@ public:
     float discreteGridSteps;
     float discreteCutoffDistance;
 
-    float lowestEnergyFound;
+    float bestClusterEnergy;
+    int bestClusterIndex;
 
     DiscreteCluster currentCluster;
     std::vector<DiscreteCluster> candidateClusters;

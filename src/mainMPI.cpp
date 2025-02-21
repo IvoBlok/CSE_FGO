@@ -204,7 +204,7 @@ int main(int argc, char **argv) {
             FuzzyGlobalOptimizer FGO(clusterSize, LJLookup);
             FGO.runFGO();
 
-            if (std::abs(FGO.lowestEnergyFound - clusterBestEnergies[clusterSize]) < 0.001f)
+            if (std::abs(FGO.bestClusterEnergy - clusterBestEnergies[clusterSize]) < 0.001f)
                 localSuccessfullFinds++;
         }
 

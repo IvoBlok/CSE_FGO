@@ -1,4 +1,6 @@
 #include <iostream>
+#include <chrono>
+
 #include "FGO.hpp"
 
 float clusterBestEnergies[151] = {
@@ -161,32 +163,37 @@ int main(int argc, char **argv) {
     int lookupElementCount = 3 * (int)std::pow(2 * (int)(2.1f / 0.02f), 2);
     LJLookup.reserve(lookupElementCount);
     
-    // to keep the code simple, here we just calculate the LJ potential for each integer up to the calculated max ( a max established to ensure all standard neighbours are close enough)
-    // TODO: since only the integers of the form: I1^2 + I2^2 + I3^2 occur, only those need to be computed 
+    // to keep the code simple, here we just calculate the LJ potential for each integer up to the calculated max ( a max established to ensure all standard neighbours are captured)
+    // TODO: since only the integers of the form: I1^2 + I2^2 + I3^2 occur, technically only those need to be computed 
     // LJLookup consists of the Leonard-Jones potential at the squared distance given by the index in the lookup. In the calculation here we compensate for the grid spacing
     for (int i = 0; i < lookupElementCount; i++)
         LJLookup.emplace_back(LeonardJonesSquaredPotential(i*0.02f*0.02f));
 
     
-    for (int clusterSize = 20; clusterSize < 100; clusterSize++)
+    for (int clusterSize = 2; clusterSize <= 100; clusterSize++)
     {
         int sampleCount = 100;
         int successfullFinds = 0;
         int iter = 0;
+        
+        auto startTime = std::chrono::system_clock::now();
 
         for (iter = 0; iter < sampleCount; iter++)
         {
             FuzzyGlobalOptimizer FGO(clusterSize, LJLookup);
             FGO.runFGO();
 
-            if (std::abs(FGO.lowestEnergyFound - clusterBestEnergies[clusterSize]) < 0.01f)
+            if (std::abs(FGO.bestClusterEnergy - clusterBestEnergies[clusterSize]) < 0.01f)
                 successfullFinds++;
         }
-        std::cout << "N=" << clusterSize << " finds / attempts: " << successfullFinds << " / " << iter << "\n";
+
+        auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - startTime);
+
+        std::cout << "N=" << clusterSize << " finds / attempts: " << successfullFinds << " / " << iter << " time: " << duration.count() << "s \n";
     }
     
 
 
     //int clusterSize = (int)strtol(argv[1], NULL, 10);
-    //std::cout << "N = " << clusterSize << " FEnergy: " << FGO.lowestEnergyFound << " DeltaEnergy: " << FGO.lowestEnergyFound - clusterBestEnergies[clusterSize] << "\n";
+    //std::cout << "N = " << clusterSize << " FEnergy: " << FGO.bestClusterEnergy << " DeltaEnergy: " << FGO.bestClusterEnergy - clusterBestEnergies[clusterSize] << "\n";
 }

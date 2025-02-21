@@ -16,7 +16,8 @@ FuzzyGlobalOptimizer::FuzzyGlobalOptimizer(int numberOfAtoms, const std::vector<
         discreteGridSteps(discreteGridSteps), 
         discreteCutoffDistance(discreteCutoffDistance),
         gradientStepSize(gradientStepSize),
-        lowestEnergyFound(0.f)
+        bestClusterEnergy(0.f),
+        bestClusterIndex(-1)
 { 
     // calculate initial cluster spawning radius, i.e. in what sphere of volume the atoms are 'spawned'
     spawningRadius = 0.4f * std::pow(numberOfAtoms, 0.333f);
@@ -36,43 +37,43 @@ void FuzzyGlobalOptimizer::runFGO() {
     currentCluster = DiscreteCluster{discreteGridSteps*discreteGridSteps, numberOfAtoms};
     generateInitialCluster(currentCluster, spawningRadius);
     localDiscreteOptimization(currentCluster);
-    lowestEnergyFound = currentCluster.getClusterEnergy(LJLookup);
+    bestClusterEnergy = currentCluster.getClusterEnergy(LJLookup);
 
     // ===============================================
-    // STEP 2: run first rough DMC layer, with experimentally determined hyperparameters as inputs
+    // STEP 2: run two distinct DMC layers, with experimentally determined hyperparameters as inputs
     discreteMonteCarlo(1.0f, -4.1f, 1.25f, 0.4f, 2.5f);
 
-    // ===============================================
-    // STEP 3: run second finer DMC layer, with experimentally determined hyperparameters as inputs
+    if(bestClusterIndex != -1)
+        candidateClusters[bestClusterIndex].copyInto(currentCluster);
+
     discreteMonteCarlo(1.0f, -11.0f, 1.3f, 0.3f, 1.5f);
 
     // ===============================================
-    // STEP 4: locally optimize all candidate clusters in the real space
+    // STEP 3: locally optimize all candidate clusters in the real space
 
     // get all candidates with low energies
     std::vector<ContinuousCluster> goodCandidates;
 
     for (size_t i = 0; i < candidateClusters.size(); i++)
     {
-        if (candidateClusters[i].getClusterEnergy(LJLookup) < lowestEnergyFound + 2.f) {
+        if (candidateClusters[i].getClusterEnergy(LJLookup) < bestClusterEnergy + 2.f) {
             goodCandidates.emplace_back(ContinuousCluster{candidateClusters[i], discreteGridSteps});
 
             // optimize the appropriate candidates now in real 3D space
             localRealOptimization(goodCandidates.back());
         }
     }
-    //std::cout << "candidates / low energy candidates: " << candidateClusters.size() << " / " << goodCandidates.size() << "\n";
 
     // TEMP: For debugging / development purposes, we retrieve the best real-optimized candidate
     for (size_t i = 0; i < goodCandidates.size(); i++)
     {   
         float energy = goodCandidates[i].getClusterEnergy(LeonardJonesSquaredPotential);
-        if (energy < lowestEnergyFound)
-            lowestEnergyFound = energy;
+        if (energy < bestClusterEnergy)
+            bestClusterEnergy = energy;
     }
 
     // ===============================================
-    // STEP 5: Surface Monte Carlo (SMC). mainly important for larger clusters (>100)
+    // STEP 4, 5: Surface Monte Carlo (SMC). mainly important for larger clusters (>200)
     // TODO SMC
 }
 
@@ -98,9 +99,9 @@ void FuzzyGlobalOptimizer::discreteMonteCarlo(float activeEnergy, float targetEn
         int targetAtom = getRandomAtomByWeights(atomTargetWeights);
 
         // make a new candidate cluster, with the active atomed moved to the area around the target atom, in a sphere of radius 1.
-        // Since the problem is tackled in reduced units, a distance of 1 is the optimum distance between two atoms (assuming no other atoms are in the cluster).
+        // Since the problem is tackled in reduced units, a distance of 1 ( or 2^(1/6)) is the optimum distance between two atoms (assuming no other atoms are in the cluster).
         currentCluster.copyInto(candidateCluster);
-        setAtomInRandomSphere(candidateCluster, activeAtom, 1.f, currentCluster.getPoint(targetAtom), false);
+        setAtomInRandomSphere(candidateCluster, activeAtom, 1.15f, currentCluster.getPoint(targetAtom), false);
 
         // locally optimize the modified cluster in the discrete space, while holding the rest of the cluster still
         localDiscreteFrozenOptimization(candidateCluster, activeAtom);
@@ -116,8 +117,9 @@ void FuzzyGlobalOptimizer::discreteMonteCarlo(float activeEnergy, float targetEn
             
             // if the discrete local optimization (DLO) found a new best cluster, keep the candidate
             float candidateEnergy = candidateCluster.getClusterEnergy(LJLookup);
-            if(candidateEnergy < lowestEnergyFound) {
-                lowestEnergyFound = candidateEnergy;
+            if(candidateEnergy < bestClusterEnergy) {
+                bestClusterEnergy = candidateEnergy;
+                bestClusterIndex = candidateClusters.size();
                 candidateClusters.emplace_back(candidateCluster);
                 lastSinceImprovement = 0;
             } else {
