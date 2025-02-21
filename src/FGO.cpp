@@ -208,8 +208,8 @@ void FuzzyGlobalOptimizer::localRealOptimization(ContinuousCluster& cluster) {
     float distance;
     ContinuousPoint direction;
 
-    ContinuousCluster gradientCluster1;
-    ContinuousCluster gradientCluster2;
+    ContinuousCluster gradientCluster1 = ContinuousCluster(cluster.numberOfPoints);
+    ContinuousCluster gradientCluster2 = ContinuousCluster(cluster.numberOfPoints);
 
     float originalEnergy, newEnergy1, newEnergy2;
     float lastOriginalEnergy = std::numeric_limits<float>::infinity();
@@ -232,13 +232,11 @@ void FuzzyGlobalOptimizer::localRealOptimization(ContinuousCluster& cluster) {
                     gradient[i] = gradient[i] + direction;
                 }
             }
+            // limit the gradient length to a max of 100
             gradient[i] = gradient[i] * (1.f / std::sqrt(gradient[i].lengthSquared())) * std::fmin(100.f, std::sqrt(gradient[i].lengthSquared()));
         }
         
         // create two new clusters, by moving in the opposite direction of the gradient
-        gradientCluster1 = ContinuousCluster(cluster.numberOfPoints);
-        gradientCluster2 = ContinuousCluster(cluster.numberOfPoints);
-
         for (int i = 0; i < cluster.numberOfPoints; i++)
         {
             gradientCluster1.getPoint(i) = cluster.getPoint(i) - gradient[i] * gradientStepSize;
@@ -256,10 +254,9 @@ void FuzzyGlobalOptimizer::localRealOptimization(ContinuousCluster& cluster) {
 
         // we now have the values at 3 points along the gradient direction. Fitting these points with a quadratic function yields an approximate optimal new cluster
         cluster.addToPoints(gradient, gradientStepSize * optimalDeflectionFactor);
-        //cluster.addToPoints(gradient, -gradientStepSize);
 
         float newEnergy = cluster.getClusterEnergy(LeonardJonesSquaredPotential);
-        if(std::abs(newEnergy - originalEnergy) < 1e-6f * std::abs(originalEnergy))
+        if(std::abs(newEnergy - originalEnergy) < 1e-6f)
             break;
     }
 }
