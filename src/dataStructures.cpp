@@ -12,7 +12,7 @@ float LeonardJonespotential(float distance) {
         return std::numeric_limits<float>::infinity();
 
     // using 'reduced' units, the LJ potential is simply:
-    return 4.f * (std::pow(distance, -12) - std::pow(distance, -6));
+    return std::pow(distance, -12) - 2.f * std::pow(distance, -6);
 }
 
 float LeonardJonesSquaredPotential(float squaredDistance) {
@@ -20,11 +20,11 @@ float LeonardJonesSquaredPotential(float squaredDistance) {
         return std::numeric_limits<float>::infinity();
 
     // defines the LJ potential based on a squared distance input. It saves some computation
-    return 4.f * (std::pow(squaredDistance, -6) - std::pow(squaredDistance, -3));
+    return std::pow(squaredDistance, -6) - 2.f * std::pow(squaredDistance, -3);
 }
 
 float LeonardJonesDerivative(float distance) {
-    return -24.f * (2.f * std::pow(distance, -13) - std::pow(distance, -7));
+    return -12.f * (std::pow(distance, -13) - std::pow(distance, -7));
 }
 
 ContinuousPoint::ContinuousPoint(float x, float y, float z) : x(x), y(y), z(z) { }

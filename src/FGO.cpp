@@ -101,7 +101,7 @@ void FuzzyGlobalOptimizer::discreteMonteCarlo(float activeEnergy, float targetEn
         // make a new candidate cluster, with the active atomed moved to the area around the target atom, in a sphere of radius 1.
         // Since the problem is tackled in reduced units, a distance of 1 ( or 2^(1/6)) is the optimum distance between two atoms (assuming no other atoms are in the cluster).
         currentCluster.copyInto(candidateCluster);
-        setAtomInRandomSphere(candidateCluster, activeAtom, 1.15f, currentCluster.getPoint(targetAtom), false);
+        setAtomInRandomSphere(candidateCluster, activeAtom, 1.f, currentCluster.getPoint(targetAtom), false);
 
         // locally optimize the modified cluster in the discrete space, while holding the rest of the cluster still
         localDiscreteFrozenOptimization(candidateCluster, activeAtom);
