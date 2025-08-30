@@ -1,13 +1,19 @@
-COMPILING ON WINDOWS
+COMPILING
 ========
     mkdir build
     cd build
-    cmake .. -G "MinGW Makefiles"
-    cmake --build .  or  mingw32-make
+    cmake ..
+    cmake --build .
+
+RUNNING PARALLEL VERSION ON LOCAL SYSTEM
+========
+    mkdir buildMPI
+    cd buildMPI
+    mpicxx -O3 -march=native -ffast-math -funroll-loops -o mainMPI ../src/mainMPI.cpp ../src/FGO.cpp ../src/dataStructures.cpp ../src/iscreteDistribution.cpp -lm
+    mpirun --use-hwthread-cpus -np 8 mainMPI
 
 RUNNING ON DELFTBLUE
 ========
-
     module load 2023r1 openmpi
     mpicxx -o mainMPI mainMPI.cpp FGO.cpp dataStructures.cpp discreteDistribution.cpp -lm
     srun --mem-per-cpi=128MB --account=Education-EEMCS-Courses-CSEMinor --partition=compute --cpus-per-task=1 --time=0-01:00:00 --ntasks=8 mainMPI > output.txt

@@ -1,5 +1,6 @@
 #include <iostream>
 #include <fstream>
+#include <chrono>
 #include <mpi.h>
 
 #include "FGO.hpp"
@@ -165,6 +166,9 @@ int main(int argc, char **argv) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank); // Get the rank of the current process
     MPI_Comm_size(MPI_COMM_WORLD, &size); // Get the total number of processes
 
+    std::cout << "Process " << rank << " of " << size << " started" << std::endl;
+    std::cout.flush();
+
     std::vector<float> LJLookup;
     int lookupElementCount = 3 * (int)std::pow(2 * (int)(2.1f / 0.02f), 2);
     LJLookup.reserve(lookupElementCount);
@@ -185,8 +189,13 @@ int main(int argc, char **argv) {
         }
     }
 
+    std::cout << "Process " << rank << " of " << size << " built lookup Elements" << std::endl;
+    std::cout.flush();
+
     for (int clusterSize = 2; clusterSize < 40; clusterSize++)
     {
+        auto startTime = std::chrono::system_clock::now();
+
         int sampleCount = 100;
         int localSuccessfullFinds = 0; // Local count of successful finds for this process
 
@@ -203,7 +212,6 @@ int main(int argc, char **argv) {
         for (int iter = 0; iter < localSampleCount; iter++) {
             FuzzyGlobalOptimizer FGO(clusterSize, LJLookup);
             FGO.runFGO();
-
             if (std::abs(FGO.bestClusterEnergy - clusterBestEnergies[clusterSize]) < 0.001f)
                 localSuccessfullFinds++;
         }
@@ -214,6 +222,10 @@ int main(int argc, char **argv) {
 
         // Write results to file on rank 0
         if (rank == 0) {
+            auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - startTime);
+            std::cout << "N=" << clusterSize << " finds / attempts: " << globalSuccessfullFinds << " / " << sampleCount << " time: " << duration.count() << "s \n";
+            std::cout.flush();
+
             outFile << "N=" << clusterSize << " finds / attempts: " << globalSuccessfullFinds << " / " << sampleCount << "\n";
             outFile.flush(); // Flush the buffer to ensure data is written to disk
         }
