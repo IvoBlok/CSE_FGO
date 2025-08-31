@@ -1,22 +1,18 @@
-COMPILING
+This project hosts an attempt at implementing the Fuzzy Global Optimization algorithm 'recently' proposed for finding optimal atomic clusters. It is set up for the gcc compiler suite. Additionally, a parallel version of the algorithm is hosted here. The multi-threaded approach is based on MPI, for easy compatability with super/cluster computers.
+
+Compiling
 ========
+Cmake is used to handle the build process and dependencies. The single Cmake file creates both executables for the single-threaded and multi-threaded scenario's.
     mkdir build
     cd build
     cmake ..
     cmake --build .
 
-RUNNING PARALLEL VERSION ON LOCAL SYSTEM
+Executing
 ========
-    mkdir buildMPI
-    cd buildMPI
-    mpicxx -O3 -march=native -ffast-math -funroll-loops -o mainMPI ../src/mainMPI.cpp ../src/FGO.cpp ../src/dataStructures.cpp ../src/iscreteDistribution.cpp -lm
-    mpirun --use-hwthread-cpus -np 8 mainMPI
+the single-threaded executables can just be run directly. MPI however requires the following call to start the program.
+    mpirun --use-hwthread-cpus -np 8 main_mpi
 
-RUNNING ON DELFTBLUE
-========
-    module load 2023r1 openmpi
-    mpicxx -o mainMPI mainMPI.cpp FGO.cpp dataStructures.cpp discreteDistribution.cpp -lm
-    srun --mem-per-cpi=128MB --account=Education-EEMCS-Courses-CSEMinor --partition=compute --cpus-per-task=1 --time=0-01:00:00 --ntasks=8 mainMPI > output.txt
 
 PROFILING
 ========

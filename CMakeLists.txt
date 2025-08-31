@@ -1,38 +1,43 @@
 cmake_minimum_required(VERSION 3.10)
 project(FuzzyOptimizer)
 
-# Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Add debug executable
+find_package(MPI REQUIRED)
+
+set(COMMON_SOURCES
+    src/FGO.cpp
+    src/dataStructures.cpp
+    src/discreteDistribution.cpp
+)
+
 add_executable(main_debug
     src/main.cpp
-    src/FGO.cpp
-    src/dataStructures.cpp
-    src/discreteDistribution.cpp
+    ${COMMON_SOURCES}
 )
 
-# Add optimized executable
 add_executable(main
     src/main.cpp
-    src/FGO.cpp
-    src/dataStructures.cpp
-    src/discreteDistribution.cpp
+    ${COMMON_SOURCES}
 )
 
-# Set properties for debug executable
-set_target_properties(main_debug PROPERTIES
-    COMPILE_FLAGS "-g -pg"        # Debug symbols
-    LINK_FLAGS "-g -pg"           # Link with debug symbols
+add_executable(main_mpi
+    src/mainMPI.cpp
+    ${COMMON_SOURCES}
 )
 
-# Set properties for optimized executable
-set_target_properties(main PROPERTIES
-    COMPILE_FLAGS "-O3"       # Optimization flags
-    LINK_FLAGS "-O3"          # Link with optimization flags
-)
+target_include_directories(main_mpi PRIVATE ${MPI_CXX_INCLUDE_PATH})
 
-# Link libraries (if needed, you can replace this with specific libraries)
+target_compile_options(main_debug PRIVATE -g -pg)
+target_link_options(main_debug PRIVATE -g -pg)
+
+target_compile_options(main PRIVATE -O3 -march=native -ffast-math -funroll-loops)
+target_link_options(main PRIVATE -O3)
+
+target_compile_options(main_mpi PRIVATE -O3 -march=native -ffast-math -funroll-loops)
+target_link_options(main_mpi PRIVATE -O3)
+
 target_link_libraries(main_debug PRIVATE ${CMAKE_THREAD_LIBS_INIT})
 target_link_libraries(main PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(main_mpi PRIVATE MPI::MPI_CXX ${CMAKE_THREAD_LIBS_INIT})
