@@ -3,6 +3,7 @@ This project hosts an attempt at implementing the Fuzzy Global Optimization algo
 Compiling
 ========
 Cmake is used to handle the build process and dependencies. The single Cmake file creates both executables for the single-threaded and multi-threaded scenario's.
+
     mkdir build
     cd build
     cmake ..
@@ -11,6 +12,7 @@ Cmake is used to handle the build process and dependencies. The single Cmake fil
 Executing
 ========
 the single-threaded executables can just be run directly. MPI however requires the following call to start the program.
+
     mpirun --use-hwthread-cpus -np 8 main_mpi
 
 
