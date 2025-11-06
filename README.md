@@ -19,6 +19,8 @@ the single-threaded executables can just be run directly. MPI however requires t
 PROFILING
 ========
 
+I now use perf and hotspot. So for example gather data with 'perf record --call-graph dwarf ./main_debug', then run 'hotspot' to get the results.
+
 For profiling, I currently use vallgrind, and I visualize the result with gprof2dot
 
     valgrind --tool=calgrind ./main_debug
