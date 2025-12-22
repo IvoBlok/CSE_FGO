@@ -56,7 +56,7 @@ struct MultiRunResult {
 
     std::vector<SingleRunResult> allRuns;
 
-    // optionally more, for debugg / performance analysis or just statistics across the runs
+    // optionally more, for debug / performance analysis or just statistics across the runs
 };
 
 
