@@ -160,11 +160,12 @@ float clusterBestEnergies[151] = {
 int main(int argc, char **argv) {
 
     FGOParameters params;
-    params.numberOfAtoms = 15;
+    params.numberOfAtoms = 2;
+    params.spawningRadiusFactor = 0.55;
 
     FuzzyGlobalOptimizer optimizer(params);
 
-    auto result = optimizer.runSingle();
-    std::cout << "Best energy: " << result.bestEnergy << "\n";
-    
+    auto result = optimizer.runMultiple(100);
+    std::cout << "Best energy: " << result.globalBestEnergy << "\n";
+
 }

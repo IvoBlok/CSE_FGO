@@ -96,11 +96,13 @@ private:
     void runDMCLayer(DiscreteCluster& startCluster, 
                     const FGOParameters::DMCParameters& dmcParams,
                     std::mt19937& rng);
-
+    
     void localRealOptimization(ContinuousCluster& cluster);
 
+    // helper functions for the main algorithm steps above
     DiscretePoint getPointInSphere(std::mt19937& rng, const float radius, const DiscretePoint& center, const bool allowZero = true);
 
+    size_t localDiscreteFrozenOptimization(DiscreteCluster& cluster, size_t frozenIndex);
 };
 
 /*

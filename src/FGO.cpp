@@ -74,9 +74,15 @@ void FuzzyGlobalOptimizer::initializeCluster(DiscreteCluster& cluster, std::mt19
 }
 
 void FuzzyGlobalOptimizer::localDiscreteOptimization(DiscreteCluster& cluster) {
+    std::list<size_t> activeList;
+    for (size_t i = 0; i < cluster.size(); i++)
+        activeList.emplace_back(i);
 
+    while (!activeList.empty())
+        activeList.remove_if([&cluster, this](int i){ return localDiscreteFrozenOptimization(cluster, i) == 0; });
 }
 
+// helper functions
 DiscretePoint FuzzyGlobalOptimizer::getPointInSphere(std::mt19937& rng, const float radius, const DiscretePoint& center, const bool allowZero) {
     float u, theta, phi, r;
     int x, y, z;
@@ -98,6 +104,41 @@ DiscretePoint FuzzyGlobalOptimizer::getPointInSphere(std::mt19937& rng, const fl
     return DiscretePoint{center.x + x, center.y + y, center.z + z};
 }
 
+size_t FuzzyGlobalOptimizer::localDiscreteFrozenOptimization(DiscreteCluster& cluster, size_t freeIndex) {
+    float oldAtomEnergy = cluster.getAtomEnergy(freeIndex);
+    int lastMoved, changes, axis;
+    lastMoved = changes = axis = 0;
+
+    DiscretePoint& freePoint = cluster.getPoint(freeIndex);
+
+    while (lastMoved < 3) {
+        axis = (++axis) % 3;
+        freePoint[axis] += 1;
+        float newAtomEnergy = cluster.getAtomEnergy(freeIndex);
+
+        if (newAtomEnergy - oldAtomEnergy < 0.0f) {
+            oldAtomEnergy = newAtomEnergy;
+            lastMoved = 0;
+            changes++;
+            continue;
+        }
+
+        freePoint[axis] -= 2;
+        newAtomEnergy = cluster.getAtomEnergy(freeIndex);
+
+        if (newAtomEnergy - oldAtomEnergy < 0.0f) {
+            oldAtomEnergy = newAtomEnergy;
+            lastMoved = 0;
+            changes++;
+            continue;
+        }
+
+        freePoint[axis] += 1;
+        lastMoved++;
+    }
+
+    return changes;
+}   
 
 
 /*
@@ -335,40 +376,5 @@ int FuzzyGlobalOptimizer::getRandomAtomByWeights(std::vector<float>& atomWeights
     discreteDistribution.updateDistribution(atomWeights);
 
     return discreteDistribution.generate(gen);
-}
-
-DiscretePoint FuzzyGlobalOptimizer::generateUniformRandomPointInSphere(float radius, DiscretePoint center, bool allowZero = true) {
-
-    float u, theta, phi, r;
-    int x, y, z;
-
-    // Generate random spherical coordinates
-    u = dist(gen);
-    r = radius * std::cbrt(u);
-    theta = distTheta(gen);
-    phi = distPhi(gen);
-
-    // Convert to Cartesian coordinates        
-    x = static_cast<int>(std::round(r * std::sin(phi) * std::cos(theta) / discreteGridSteps));
-    y = static_cast<int>(std::round(r * std::sin(phi) * std::sin(theta) / discreteGridSteps));
-    z = static_cast<int>(std::round(r * std::cos(phi) / discreteGridSteps));
-
-    if(!allowZero && x == 0 && y == 0 && z == 0)
-        generateUniformRandomPointInSphere(radius, center, allowZero);
-
-    return DiscretePoint{center.x + x, center.y + y, center.z + z};
-}
-
-void FuzzyGlobalOptimizer::setAtomInRandomSphere(DiscreteCluster& cluster, int atomIndex, float radius, DiscretePoint center, bool allowZero = true) {
-    DiscretePoint randomPoint = generateUniformRandomPointInSphere(radius, center, allowZero);
-    
-    cluster.setPoint(atomIndex, randomPoint);
-}
-
-void FuzzyGlobalOptimizer::generateInitialCluster(DiscreteCluster& cluster, float radius) {
-    // assumed is that the cubic grid has equal radius to the spawning sphere. Thus the center of the cube can be retrieved from the sphere radius
-    // here the case of points starting on identical locations is ignored, though this might cause issues later
-    for (size_t i = 0; i < numberOfAtoms; i++)
-        setAtomInRandomSphere(cluster, i, radius, DiscretePoint{static_cast<int>(std::round(radius / discreteGridSteps))});
 }
 */
