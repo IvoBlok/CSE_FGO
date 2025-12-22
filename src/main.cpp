@@ -159,37 +159,12 @@ float clusterBestEnergies[151] = {
 
 int main(int argc, char **argv) {
 
-    std::vector<float> LJLookup;
-    int lookupElementCount = 3 * (int)std::pow((int)(2.1f / 0.02f), 2);
-    LJLookup.reserve(lookupElementCount);
+    FGOParameters params;
+    params.numberOfAtoms = 15;
+
+    FuzzyGlobalOptimizer optimizer(params);
+
+    auto result = optimizer.runSingle();
+    std::cout << "Best energy: " << result.bestEnergy << "\n";
     
-    // to keep the code simple, here we just calculate the LJ potential for each integer up to the calculated max ( a max established to ensure all standard neighbours are captured)
-    // LJLookup consists of the Leonard-Jones potential at the squared distance given by the index in the lookup. In the calculation here we compensate for the grid spacing
-    for (int i = 0; i < lookupElementCount; i++)
-        LJLookup.emplace_back(lennardJonesSquaredPotential(i*0.02f*0.02f));
-
-    
-    for (int clusterSize = 2; clusterSize <= 100; clusterSize++)
-    {
-        int sampleCount = 100;
-        int successfullFinds = 0;
-        int iter = 0;
-        
-        auto startTime = std::chrono::system_clock::now();
-
-        for (iter = 0; iter < sampleCount; iter++)
-        {
-            FuzzyGlobalOptimizer FGO(clusterSize, LJLookup);
-            FGO.runFGO();
-
-            if (std::abs(FGO.bestClusterEnergy - clusterBestEnergies[clusterSize]) < 0.01f)
-                successfullFinds++;
-        }
-
-        auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - startTime);
-
-        std::cout << "N=" << clusterSize << " finds / attempts: " << successfullFinds << " / " << iter << " time: " << duration.count() << "s \n";
-    }
-    
-    //int clusterSize = (int)strtol(argv[1], NULL, 10);
 }

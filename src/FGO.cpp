@@ -10,27 +10,55 @@
 
 # define M_PI           3.14159265358979323846  /* pi */
 
-FuzzyGlobalOptimizer::FuzzyGlobalOptimizer(int numberOfAtoms, const std::vector<float>& LJLookup, float discreteGridSteps, float discreteCutoffDistance, float gradientStepSize) 
-    :   numberOfAtoms(numberOfAtoms), 
-        LJLookup(LJLookup),
-        discreteGridSteps(discreteGridSteps), 
-        discreteCutoffDistance(discreteCutoffDistance),
-        gradientStepSize(gradientStepSize),
-        bestClusterEnergy(0.f),
-        bestClusterIndex(-1)
-{ 
-    // calculate initial cluster spawning radius, i.e. in what sphere of volume the atoms are 'spawned'
-    spawningRadius = 0.4f * std::pow(numberOfAtoms, 0.333f);
-    
-    // sphere based random point generation initialization
-    gen = std::minstd_rand0(rd());
-    dist = std::uniform_real_distribution<>(0.0, 1.0);         // For uniform sampling
-    distTheta = std::uniform_real_distribution<>(0.0, 2.f * M_PI); // Azimuthal angle
-    distPhi = std::uniform_real_distribution<>(0.0, M_PI);     // Polar angle
+FuzzyGlobalOptimizer::FuzzyGlobalOptimizer(const FGOParameters& params)
+    : params(params), atomSelector(DiscreteDistribution(params.numberOfAtoms)), rng(std::random_device{}()) {}
 
-    discreteDistribution = DiscreteDistribution{numberOfAtoms};
+FuzzyGlobalOptimizer::FuzzyGlobalOptimizer(FGOParameters&& params)
+    : params(std::move(params)), atomSelector(DiscreteDistribution(params.numberOfAtoms)), rng(std::random_device{}()) {}
+
+SingleRunResult FuzzyGlobalOptimizer::runSingle() {
+    return runSingle(rng);
 }
 
+SingleRunResult FuzzyGlobalOptimizer::runSingleWithSeed(uint32_t seed) {
+    std::mt19937 seededRng(seed);
+    return runSingle(seededRng);
+}
+
+SingleRunResult FuzzyGlobalOptimizer::runSingle(std::mt19937& rng) {
+    RunState state;
+
+    initializeCluster(state.currentDiscrete, rng);
+    localDiscreteOptimization(state.currentDiscrete);
+    state.bestEnergy = state.currentDiscrete.getClusterEnergy();
+
+    // TODO DMC1, DMC2, SMC
+
+    SingleRunResult result;
+    result.bestCluster = ContinuousCluster(state.currentDiscrete, params.discreteGridSteps);
+    result.bestEnergy = state.bestEnergy;
+    
+    return result;
+}
+
+MultiRunResult FuzzyGlobalOptimizer::runMultiple(size_t numRuns) {
+    MultiRunResult multiResult;
+    multiResult.allRuns.reserve(numRuns);
+
+    for (size_t i = 0; i < numRuns; i++)
+    {
+        std::mt19937 runRng(std::random_device{}());
+        auto singleResult = runSingle(runRng);
+        multiResult.allRuns.emplace_back(std::move(singleResult));
+
+        if (singleResult.bestEnergy < multiResult.globalBestEnergy) {
+            
+        }
+    }
+    
+}
+
+/*
 void FuzzyGlobalOptimizer::runFGO() {
     // ===============================================
     // STEP 1: create initial cluster
@@ -301,3 +329,4 @@ void FuzzyGlobalOptimizer::generateInitialCluster(DiscreteCluster& cluster, floa
     for (size_t i = 0; i < numberOfAtoms; i++)
         setAtomInRandomSphere(cluster, i, radius, DiscretePoint{static_cast<int>(std::round(radius / discreteGridSteps))});
 }
+*/
