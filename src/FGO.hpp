@@ -70,7 +70,6 @@ private:
     std::uniform_real_distribution<float> phiDist{0.0f, M_PI};
 
     struct RunState {
-        DiscreteCluster currentDiscrete;
         std::vector<DiscreteCluster> discreteCandidates;
         std::vector<ContinuousCluster> continuousCandidates;
 

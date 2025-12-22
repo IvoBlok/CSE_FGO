@@ -27,10 +27,12 @@ SingleRunResult FuzzyGlobalOptimizer::runSingleWithSeed(uint32_t seed) {
 
 SingleRunResult FuzzyGlobalOptimizer::runSingle(std::mt19937& rng) {
     RunState state;
+    DiscreteCluster& cluster = state.discreteCandidates.emplace_back(DiscreteCluster());
+    state.bestDiscreteIndex = 0;
 
-    initializeCluster(state.currentDiscrete, rng);
-    localDiscreteOptimization(state.currentDiscrete);
-    state.bestEnergy = state.currentDiscrete.getClusterEnergy();
+    initializeCluster(cluster, rng);
+    localDiscreteOptimization(cluster);
+    state.bestEnergy = cluster.getClusterEnergy();
 
     runDMCLayer(state, params.dmcLayer1, rng);
 
@@ -87,9 +89,6 @@ void FuzzyGlobalOptimizer::localDiscreteOptimization(DiscreteCluster& cluster) {
 void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMCParameters& dmcParams, std::mt19937& rng) {
     size_t stepsSinceImprovement = 0;
 
-    state.discreteCandidates.emplace_back(state.currentDiscrete);
-    state.bestDiscreteIndex = 0;
-    
     DiscreteCluster candidate{params.discreteGridSteps * params.discreteGridSteps, params.numberOfAtoms};
 
     std::vector<float> atomEnergies(params.numberOfAtoms);
