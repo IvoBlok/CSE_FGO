@@ -166,7 +166,7 @@ int main(int argc, char **argv) {
     // to keep the code simple, here we just calculate the LJ potential for each integer up to the calculated max ( a max established to ensure all standard neighbours are captured)
     // LJLookup consists of the Leonard-Jones potential at the squared distance given by the index in the lookup. In the calculation here we compensate for the grid spacing
     for (int i = 0; i < lookupElementCount; i++)
-        LJLookup.emplace_back(LeonardJonesSquaredPotential(i*0.02f*0.02f));
+        LJLookup.emplace_back(lennardJonesSquaredPotential(i*0.02f*0.02f));
 
     
     for (int clusterSize = 2; clusterSize <= 100; clusterSize++)

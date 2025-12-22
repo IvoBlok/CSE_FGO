@@ -44,7 +44,7 @@ void FuzzyGlobalOptimizer::runFGO() {
     discreteMonteCarlo(1.0f, -4.1f, 1.25f, 0.4f, 2.5f);
 
     if(bestClusterIndex != -1)
-        candidateClusters[bestClusterIndex].copyInto(currentCluster);
+        candidateClusters[bestClusterIndex].copyTo(currentCluster);
 
     discreteMonteCarlo(1.0f, -11.0f, 1.3f, 0.3f, 1.5f);
 
@@ -67,7 +67,7 @@ void FuzzyGlobalOptimizer::runFGO() {
     // TEMP: For debugging / development purposes, we retrieve the best real-optimized candidate
     for (size_t i = 0; i < goodCandidates.size(); i++)
     {   
-        float energy = goodCandidates[i].getClusterEnergy(LeonardJonesSquaredPotential);
+        float energy = goodCandidates[i].getClusterEnergy(lennardJonesSquaredPotential);
         if (energy < bestClusterEnergy)
             bestClusterEnergy = energy;
     }
@@ -100,7 +100,7 @@ void FuzzyGlobalOptimizer::discreteMonteCarlo(float activeEnergy, float targetEn
 
         // make a new candidate cluster, with the active atomed moved to the area around the target atom, in a sphere of radius 1.
         // Since the problem is tackled in reduced units, a distance of 1 ( or 2^(1/6)) is the optimum distance between two atoms (assuming no other atoms are in the cluster).
-        currentCluster.copyInto(candidateCluster);
+        currentCluster.copyTo(candidateCluster);
         setAtomInRandomSphere(candidateCluster, activeAtom, 1.f, currentCluster.getPoint(targetAtom), false);
 
         // locally optimize the modified cluster in the discrete space, while holding the rest of the cluster still
@@ -127,7 +127,7 @@ void FuzzyGlobalOptimizer::discreteMonteCarlo(float activeEnergy, float targetEn
             }
 
             // now that we have a probably better cluster, make it the base cluster for the next iteration
-            candidateCluster.copyInto(currentCluster);
+            candidateCluster.copyTo(currentCluster);
         } else {
             // the move - local optimization combo chosen here didn't work out. keep the original cluster
             lastSinceImprovement++;
@@ -228,7 +228,7 @@ void FuzzyGlobalOptimizer::localRealOptimization(ContinuousCluster& cluster) {
                     distance = std::sqrt(distanceSquared);
 
                     direction = cluster.getPoint(i) - cluster.getPoint(j);
-                    direction = (direction * (1.f / distance)) * LeonardJonesDerivative(distance);
+                    direction = (direction * (1.f / distance)) * lennardJonesDerivative(distance);
                     gradient[i] = gradient[i] + direction;
                 }
             }
@@ -244,9 +244,9 @@ void FuzzyGlobalOptimizer::localRealOptimization(ContinuousCluster& cluster) {
         }
         
         // calculate the total cluster energies of these 3 clusters
-        originalEnergy = cluster.getClusterEnergy(LeonardJonesSquaredPotential);
-        newEnergy1 = gradientCluster1.getClusterEnergy(LeonardJonesSquaredPotential);
-        newEnergy2 = gradientCluster2.getClusterEnergy(LeonardJonesSquaredPotential);
+        originalEnergy = cluster.getClusterEnergy(lennardJonesSquaredPotential);
+        newEnergy1 = gradientCluster1.getClusterEnergy(lennardJonesSquaredPotential);
+        newEnergy2 = gradientCluster2.getClusterEnergy(lennardJonesSquaredPotential);
         
         if ((2 * newEnergy2 - 4 * newEnergy1 + 2 * originalEnergy) == 0.f)
             break;
@@ -255,7 +255,7 @@ void FuzzyGlobalOptimizer::localRealOptimization(ContinuousCluster& cluster) {
         // we now have the values at 3 points along the gradient direction. Fitting these points with a quadratic function yields an approximate optimal new cluster
         cluster.addToPoints(gradient, gradientStepSize * optimalDeflectionFactor);
 
-        float newEnergy = cluster.getClusterEnergy(LeonardJonesSquaredPotential);
+        float newEnergy = cluster.getClusterEnergy(lennardJonesSquaredPotential);
         if(std::abs(newEnergy - originalEnergy) < 1e-6f)
             break;
     }

@@ -1,132 +1,108 @@
 #ifndef DATA_STRUCTURES_H
 #define DATA_STRUCTURES_H
 
-#include <iostream>
-#include <cmath>
-#include <random>
-#include <set>
 #include <vector>
-#include <string>
-#include <functional>
+#include <cstddef>
 
+float lennardJonesPotential(float distance);
+float lennardJonesSquaredPotential(float squaredDistance);
+float lennardJonesDerivative(float distance);
 
-float LeonardJonespotential(float distance);
-
-float LeonardJonesSquaredPotential(float squaredDistance);
-
-float LeonardJonesDerivative(float distance);
 
 struct DiscretePoint {
-    int x;
-    int y;
-    int z;
+    int x, y, z;
 
-    DiscretePoint(int x, int y, int z);
-    DiscretePoint(int x = 0);
+    DiscretePoint() = default;
+    DiscretePoint(const int x, const int y, const int z);
+    explicit DiscretePoint(const int val);
 
     DiscretePoint operator+(const DiscretePoint& other) const;
     DiscretePoint operator-(const DiscretePoint& other) const;
 
-    DiscretePoint(const DiscretePoint& other);
-    DiscretePoint& operator=(const DiscretePoint& other);
+    int& operator[](const size_t index);
+    const int& operator[](const size_t index) const;
 
-    int& operator[](size_t index);
-
-    int lengthSquared();
+    int lengthSquared() const;
 };
 
 
 struct DiscreteCluster {
-    DiscretePoint* data;
-    int numberOfPoints;
+    std::vector<DiscretePoint> points;
     float gridStepSizeSquared;
 
-    DiscreteCluster(float gridStepSizeSquared = 0.f, int numberOfPoints = 0);
+    DiscreteCluster() = default;
+    DiscreteCluster(const float gridStepSizeSquared, const size_t numberOfPoints);
     
-    ~DiscreteCluster();
+    DiscreteCluster(const DiscreteCluster& other) = default;
+    DiscreteCluster& operator=(const DiscreteCluster& other) = default;
 
-    DiscreteCluster(const DiscreteCluster& other);
-    DiscreteCluster& operator=(const DiscreteCluster& other);
+    void setPoint(const size_t atomIndex, const int x, const int y, const int z);
+    void setPoint(const size_t atomIndex, const DiscretePoint& point);
 
-    DiscreteCluster(DiscreteCluster&& other) noexcept;
-    DiscreteCluster& operator=(DiscreteCluster&& other) noexcept;
+    DiscretePoint& getPoint(const size_t atomIndex);
+    const DiscretePoint& getPoint(const size_t atomIndex) const;
 
-    void setPoint(int atomIndex, int x, int y, int z);
-    void setPoint(int atomIndex, DiscretePoint& point);
+    int getDistanceSquared(const size_t atomIndex1, const size_t atomIndex2) const;
 
-    DiscretePoint& getPoint(int atomIndex);
+    float getAtomEnergy(const size_t atomIndex) const;
+    float getAtomEnergy(const size_t atomIndex, const std::vector<size_t>& atomsToConsider) const;
+    float getClusterEnergy() const;
 
-    int getDistanceSquared(int atomIndex1, int atomIndex2);
+    std::vector<size_t> getAtomNeighbours(const size_t atomIndex, const int cutoffDistanceSquared) const;
 
-    float getAtomEnergy(const std::vector<float>& lookup, int atomIndex);
-    float getAtomEnergy(const std::vector<float>& lookup, int atomIndex, const std::vector<int>& atomsToConsider);
+    void copyTo(DiscreteCluster& otherCluster) const;
 
-    float getClusterEnergy(const std::vector<float>& lookup);
-
-    std::vector<int> getAtomNeighbours(int atomIndex, int cutoffDistanceSquared);
-
-    void copyInto(DiscreteCluster& otherCluster);
+    size_t size() const;
 };
 
 
 struct ContinuousPoint {
-    float x;
-    float y;
-    float z;
+    float x, y, z;
 
-    ContinuousPoint(float x, float y, float z);
-    ContinuousPoint(float x = 0.f);
-    ContinuousPoint(DiscretePoint& discretePoint, float gridStepSize);
+    ContinuousPoint() = default;
+    ContinuousPoint(const float x, const float y, const float z);
+    explicit ContinuousPoint(const float val);
+    explicit ContinuousPoint(const DiscretePoint& discretePoint, const float gridStepSize);
 
     ContinuousPoint operator+(const ContinuousPoint& other) const;
     ContinuousPoint operator-(const ContinuousPoint& other) const;
-
     ContinuousPoint operator*(float scalar) const;
-    ContinuousPoint operator*(double scalar) const;
 
-    ContinuousPoint(const ContinuousPoint& other);
-    ContinuousPoint& operator=(const ContinuousPoint& other);
+    float& operator[](const size_t index);
+    const float& operator[](const size_t index) const;
 
-    float& operator[](size_t index);
-
-    float lengthSquared();
+    float lengthSquared() const;
 };
 
 
 struct ContinuousCluster {
-    ContinuousPoint* data;
-    int numberOfPoints;
-
+    std::vector<ContinuousPoint> points;
     
-    ContinuousCluster(int numberOfPoints = 0);
-    ContinuousCluster(DiscreteCluster& discreteCluster, float gridStepSize);
+    ContinuousCluster() = default;
+    explicit ContinuousCluster(const size_t numberOfPoints);
+    explicit ContinuousCluster(const DiscreteCluster& discreteCluster, const float gridStepSize);
 
-    ~ContinuousCluster();
+    ContinuousCluster(const ContinuousCluster& other) = default;
+    ContinuousCluster& operator=(const ContinuousCluster& other) = default;
 
-    ContinuousCluster(const ContinuousCluster& other);
-    ContinuousCluster& operator=(const ContinuousCluster& other);
+    void setPoint(const size_t atomIndex, const float x, const float y, const float z);
+    void setPoint(const size_t atomIndex, const ContinuousPoint& point);
 
-    ContinuousCluster(ContinuousCluster&& other) noexcept;
-    ContinuousCluster& operator=(ContinuousCluster&& other) noexcept;
+    ContinuousPoint& getPoint(const size_t atomIndex);
+    const ContinuousPoint& getPoint(const size_t atomIndex) const;
 
-    void setPoint(int atomIndex, float x, float y, float z);
-    void setPoint(int atomIndex, ContinuousPoint& point);
+    void addToPoints(const std::vector<ContinuousPoint>& deltas, const float factor);
 
-    void addToPoints(std::vector<ContinuousPoint>& points, float factor);
+    float getDistanceSquared(const size_t atomIndex1, const size_t atomIndex2) const;
 
-    ContinuousPoint& getPoint(int atomIndex);
+    float getAtomEnergy(const size_t atomIndex) const;
+    float getAtomEnergy(const size_t atomIndex, const std::vector<size_t>& atomsToConsider) const;
 
-    float getDistanceSquared(int atomIndex1, int atomIndex2);
-
-    float getAtomEnergy(std::function<float(float)> potentialSquared, int atomIndex);
-    float getAtomEnergy(std::function<float(float)> potentialSquared, int atomIndex, std::vector<int>& atomsToConsider);
-
-    float getClusterEnergy(std::function<float(float)> potentialSquared);
+    float getClusterEnergy() const;
     
-    void copyInto(ContinuousCluster& otherCluster);
+    void copyTo(ContinuousCluster& otherCluster) const;
 
-    void writeClusterToFile(const std::string& filename);
+    size_t size() const;
 };
-
 
 #endif // DATA_STRUCTURES_H

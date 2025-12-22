@@ -7,15 +7,17 @@
 #include <random>
 #include <algorithm>
 
-float LeonardJonespotential(float distance) {
-    if(distance = 0.f)
+
+
+float lennardJonesPotential(float distance) {
+    if(distance == 0.f)
         return std::numeric_limits<float>::infinity();
 
     // using 'reduced' units, the LJ potential is simply:
     return std::pow(distance, -12) - 2.f * std::pow(distance, -6);
 }
 
-float LeonardJonesSquaredPotential(float squaredDistance) {
+float lennardJonesSquaredPotential(float squaredDistance) {
     if(squaredDistance < 0.002f)
         return std::numeric_limits<float>::infinity();
 
@@ -23,19 +25,140 @@ float LeonardJonesSquaredPotential(float squaredDistance) {
     return std::pow(squaredDistance, -6) - 2.f * std::pow(squaredDistance, -3);
 }
 
-float LeonardJonesDerivative(float distance) {
+float lennardJonesDerivative(float distance) {
     return -12.f * (std::pow(distance, -13) - std::pow(distance, -7));
 }
 
-ContinuousPoint::ContinuousPoint(float x, float y, float z) : x(x), y(y), z(z) { }
 
-ContinuousPoint::ContinuousPoint(float x) : x(x), y(x), z(x) { }
 
-ContinuousPoint::ContinuousPoint(DiscretePoint& discretePoint, float gridStepSize) {
-    x = discretePoint.x * gridStepSize;
-    y = discretePoint.y * gridStepSize;
-    z = discretePoint.z * gridStepSize;
+// DiscretePoint Implementation
+// ===================================================================================
+DiscretePoint::DiscretePoint(const int x, const int y, const int z) : x(x), y(y), z(z) {}
+
+DiscretePoint::DiscretePoint(const int val) : x(val), y(val), z(val) {}
+
+DiscretePoint DiscretePoint::operator+(const DiscretePoint& other) const {
+    return DiscretePoint(x + other.x, y + other.y, z + other.z);
 }
+
+DiscretePoint DiscretePoint::operator-(const DiscretePoint& other) const {
+    return DiscretePoint(x - other.x, y - other.y, z - other.z);
+}
+
+int& DiscretePoint::operator[](const size_t index) {
+    if (index >= 3) 
+        throw std::out_of_range("Index out of range. Valid indices are 0, 1, and 2\n");
+
+    return (&x)[index];
+}
+
+const int& DiscretePoint::operator[](const size_t index) const {
+    if (index >= 3) 
+        throw std::out_of_range("Index out of range. Valid indices are 0, 1, and 2\n");
+
+    return (&x)[index];
+}
+
+int DiscretePoint::lengthSquared() const {
+    return x*x + y*y + z*z;
+}
+
+
+
+// DiscreteCluster Implementation
+// ===================================================================================
+DiscreteCluster::DiscreteCluster(const float gridStepSizeSquared, const size_t numberOfPoints) : gridStepSizeSquared(gridStepSizeSquared), points(numberOfPoints) {}
+
+void DiscreteCluster::setPoint(const size_t atomIndex, const int x, const int y, const int z) {
+    points[atomIndex] = {x, y, z};
+}
+
+void DiscreteCluster::setPoint(const size_t atomIndex, const DiscretePoint& point) {
+    points[atomIndex] = point;
+}
+
+DiscretePoint& DiscreteCluster::getPoint(const size_t atomIndex) {
+    return points[atomIndex];
+}
+
+const DiscretePoint& DiscreteCluster::getPoint(const size_t atomIndex) const {
+    return points[atomIndex];
+}
+
+int DiscreteCluster::getDistanceSquared(const size_t atomIndex1, const size_t atomIndex2) const {
+    const auto& p1 = points[atomIndex1];
+    const auto& p2 = points[atomIndex2];
+    const int dx = p1.x - p2.x;
+    const int dy = p1.y - p2.y;
+    const int dz = p1.z - p2.z;
+    return dx*dx + dy*dy + dz*dz;
+}
+
+float DiscreteCluster::getAtomEnergy(const size_t atomIndex) const {
+    float total = 0.f;
+
+    for (size_t j = 0; j < points.size(); j++)
+    {   
+        if (atomIndex != j) {
+            const int squaredDistance = getDistanceSquared(atomIndex, j);
+            total += lennardJonesSquaredPotential(squaredDistance * gridStepSizeSquared);
+        }
+    }
+    return total;
+}
+
+float DiscreteCluster::getAtomEnergy(const size_t atomIndex, const std::vector<size_t>& atomsToConsider) const {
+    float total = 0.f;
+
+    for (const size_t& atom : atomsToConsider)
+    {
+        if (atomIndex != atom) {
+            const int squaredDistance = getDistanceSquared(atomIndex, atom);
+            total += lennardJonesSquaredPotential(squaredDistance * gridStepSizeSquared);
+        }
+    }
+    return total;
+}
+
+float DiscreteCluster::getClusterEnergy() const {
+    float total = 0.f;
+
+    for (size_t i = 0; i < points.size(); i++)
+        total += getAtomEnergy(i);
+
+    return total * 0.5f; // each pair gets counted twice, so half the total to account for this
+}
+
+std::vector<size_t> DiscreteCluster::getAtomNeighbours(const size_t atomIndex, const int cutoffDistanceSquared) const {
+    std::vector<size_t> neighbours;
+    neighbours.reserve(points.size());
+
+    for (size_t i = 0; i < points.size(); i++) {
+        if (i == atomIndex) continue;
+        if (getDistanceSquared(atomIndex, i) < cutoffDistanceSquared)
+            neighbours.emplace_back(i);
+    }
+
+    return neighbours;
+}
+
+void DiscreteCluster::copyTo(DiscreteCluster& otherCluster) const {
+    otherCluster.gridStepSizeSquared = gridStepSizeSquared;
+    otherCluster.points = points;
+}
+
+size_t DiscreteCluster::size() const { return points.size(); }
+
+
+
+// ContinuousPoint Implementation
+// ===================================================================================
+ContinuousPoint::ContinuousPoint(const float x, const float y, const float z) : x(x), y(y), z(z) {}
+
+ContinuousPoint::ContinuousPoint(const float val) : x(val), y(val), z(val) {}
+
+ContinuousPoint::ContinuousPoint(const DiscretePoint& discretePoint, const float gridStepSize) 
+    : x(discretePoint.x * gridStepSize), y(discretePoint.y * gridStepSize), z(discretePoint.z * gridStepSize) {}
 
 ContinuousPoint ContinuousPoint::operator+(const ContinuousPoint& other) const {
     return ContinuousPoint(x + other.x, y + other.y, z + other.z);
@@ -49,345 +172,105 @@ ContinuousPoint ContinuousPoint::operator*(float scalar) const {
     return ContinuousPoint(x * scalar, y * scalar, z * scalar);
 }
 
-ContinuousPoint ContinuousPoint::operator*(double scalar) const {
-    return ContinuousPoint(x * scalar, y * scalar, z * scalar);
-}
-
-ContinuousPoint::ContinuousPoint(const ContinuousPoint& other) : x(other.x), y(other.y), z(other.z) { }
-
-ContinuousPoint& ContinuousPoint::operator=(const ContinuousPoint& other) {
-    if (this == &other) return *this;
-
-    x = other.x;
-    y = other.y;
-    z = other.z;
-
-    return *this;
-}
-
-float& ContinuousPoint::operator[](size_t index) {
+float& ContinuousPoint::operator[](const size_t index) {
     if (index >= 3) 
         throw std::out_of_range("Index out of range. Valid indices are 0, 1, and 2\n");
 
     return (&x)[index];
 }
 
-float ContinuousPoint::lengthSquared() {
-    return x*x + y*y + z*z;
-}
-
-
-
-DiscretePoint::DiscretePoint(int x, int y, int z) : x(x), y(y), z(z) { }
-
-DiscretePoint::DiscretePoint(int x) : x(x), y(x), z(x) { }
-
-DiscretePoint DiscretePoint::operator+(const DiscretePoint& other) const {
-    return DiscretePoint(x + other.x, y + other.y, z + other.z);
-}
-
-DiscretePoint DiscretePoint::operator-(const DiscretePoint& other) const {
-    return DiscretePoint(x - other.x, y - other.y, z - other.z);
-}
-
-DiscretePoint::DiscretePoint(const DiscretePoint& other) : x(other.x), y(other.y), z(other.z) { }
-
-DiscretePoint& DiscretePoint::operator=(const DiscretePoint& other) {
-    if (this == &other) return *this;
-
-    x = other.x;
-    y = other.y;
-    z = other.z;
-
-    return *this;
-}
-
-int& DiscretePoint::operator[](size_t index) {
+const float& ContinuousPoint::operator[](const size_t index) const {
     if (index >= 3) 
         throw std::out_of_range("Index out of range. Valid indices are 0, 1, and 2\n");
 
     return (&x)[index];
 }
 
-int DiscretePoint::lengthSquared() {
+float ContinuousPoint::lengthSquared() const {
     return x*x + y*y + z*z;
 }
 
 
 
-DiscreteCluster::DiscreteCluster(float gridStepSizeSquared, int numberOfPoints) : gridStepSizeSquared(gridStepSizeSquared), numberOfPoints(numberOfPoints) { 
-    data = new DiscretePoint[numberOfPoints];
+// ContinuousCluster Implementation
+// ===================================================================================
+ContinuousCluster::ContinuousCluster(const size_t numberOfPoints) : points(numberOfPoints) {}
+
+ContinuousCluster::ContinuousCluster(const DiscreteCluster& discreteCluster, const float gridStepSize) : points(discreteCluster.points.size()) {
+    for (size_t i = 0; i < points.size(); i++)
+        points[i] = ContinuousPoint{discreteCluster.getPoint(i), gridStepSize};
 }
 
-DiscreteCluster::DiscreteCluster(const DiscreteCluster& other) : gridStepSizeSquared(other.gridStepSizeSquared), numberOfPoints(other.numberOfPoints), data(new DiscretePoint[other.numberOfPoints]) {
-    for (int i = 0; i < numberOfPoints; i++)
-    {
-        data[i] = other.data[i];
-    }
+void ContinuousCluster::setPoint(const size_t atomIndex, const float x, const float y, const float z) {
+    points[atomIndex] = {x, y, z};
 }
 
-DiscreteCluster& DiscreteCluster::operator=(const DiscreteCluster& other) {
-    if (this == &other) return *this;
-
-    delete[] data;
-
-    gridStepSizeSquared = other.gridStepSizeSquared;
-    numberOfPoints = other.numberOfPoints;
-    data = new DiscretePoint[numberOfPoints];
-    for (int i = 0; i < numberOfPoints; i++)
-    {
-        data[i] = other.data[i];
-    }
-    
-    return *this;
+void ContinuousCluster::setPoint(const size_t atomIndex, const ContinuousPoint& point) {
+    points[atomIndex] = point;
 }
 
-DiscreteCluster::DiscreteCluster(DiscreteCluster&& other) noexcept : gridStepSizeSquared(other.gridStepSizeSquared), numberOfPoints(other.numberOfPoints), data(other.data) {
-    other.data = nullptr;
+ContinuousPoint& ContinuousCluster::getPoint(const size_t atomIndex) {
+    return points[atomIndex];
 }
 
-DiscreteCluster& DiscreteCluster::operator=(DiscreteCluster&& other) noexcept {
-    if (this == &other) return *this;
-
-    delete[] data;
-
-    gridStepSizeSquared = other.gridStepSizeSquared;
-    numberOfPoints = other.numberOfPoints;
-    data = other.data;
-    other.data = nullptr;
-    other.numberOfPoints = 0;
-
-    return *this;
+const ContinuousPoint& ContinuousCluster::getPoint(const size_t atomIndex) const {
+    return points[atomIndex];
 }
 
-DiscreteCluster::~DiscreteCluster() {
-    delete[] data;
-    data = nullptr;
+void ContinuousCluster::addToPoints(const std::vector<ContinuousPoint>& deltas, const float factor) {
+    if (points.size() != deltas.size()) 
+        throw std::invalid_argument("addToPoints: size mismatch");
+
+    for (size_t i = 0; i < points.size(); i++)
+        points[i] = points[i] + deltas[i] * factor;
 }
 
-void DiscreteCluster::setPoint(int atomIndex, int x, int y, int z) {
-    data[atomIndex].x = x;
-    data[atomIndex].y = y;
-    data[atomIndex].z = z;
+float ContinuousCluster::getDistanceSquared(const size_t atomIndex1, const size_t atomIndex2) const {
+    const auto& p1 = points[atomIndex1];
+    const auto& p2 = points[atomIndex2];
+    const float dx = p1.x - p2.x;
+    const float dy = p1.y - p2.y;
+    const float dz = p1.z - p2.z;
+    return dx*dx + dy*dy + dz*dz;
 }
 
-void DiscreteCluster::setPoint(int atomIndex, DiscretePoint& point) {
-    data[atomIndex].x = point.x;
-    data[atomIndex].y = point.y;
-    data[atomIndex].z = point.z;
-}
+float ContinuousCluster::getAtomEnergy(const size_t atomIndex) const {
+    float total = 0.f;
 
-DiscretePoint& DiscreteCluster::getPoint(int atomIndex) {
-    return data[atomIndex];
-}
-
-int DiscreteCluster::getDistanceSquared(int atomIndex1, int atomIndex2) {
-    DiscretePoint delta = data[atomIndex1] - data[atomIndex2];
-    return delta.lengthSquared();
-}
-
-float DiscreteCluster::getAtomEnergy(const std::vector<float>& lookup, int atomIndex) {
-    int squaredDistance;
-    float result = 0.f;
-
-    for (size_t j = 0; j < numberOfPoints; j++)
+    for (size_t j = 0; j < points.size(); j++)
     {   
-        if(atomIndex != j) {
-            squaredDistance = getDistanceSquared(atomIndex, j);
-            if(squaredDistance < lookup.size())
-                result += lookup[squaredDistance];
-            else 
-                result += LeonardJonesSquaredPotential(squaredDistance * gridStepSizeSquared);
+        if (atomIndex != j) {
+            const float squaredDistance = getDistanceSquared(atomIndex, j);
+            total += lennardJonesSquaredPotential(squaredDistance);
         }
     }
-    return result;
+    return total;
 }
 
-float DiscreteCluster::getAtomEnergy(const std::vector<float>& lookup, int atomIndex, const std::vector<int>& atomsToConsider) {
-    int squaredDistance;
-    float result = 0.f;
+float ContinuousCluster::getAtomEnergy(const size_t atomIndex, const std::vector<size_t>& atomsToConsider) const {
+    float total = 0.f;
 
-    for (size_t j = 0; j < atomsToConsider.size(); j++)
+    for (const size_t& atom : atomsToConsider)
     {
-        if(atomIndex != atomsToConsider[j]) {
-            squaredDistance = getDistanceSquared(atomIndex, atomsToConsider[j]);
-            if(squaredDistance < lookup.size())
-                result += lookup[squaredDistance];
-            else 
-                result += LeonardJonesSquaredPotential(squaredDistance * gridStepSizeSquared);        }
-    }
-    return result;
-}
-
-float DiscreteCluster::getClusterEnergy(const std::vector<float>& lookup) {
-    float result = 0.f;
-
-    for (int i = 0; i < numberOfPoints; i++)
-        result += getAtomEnergy(lookup, i);
-
-    return result * 0.5f;    
-}
-
-std::vector<int> DiscreteCluster::getAtomNeighbours(int atomIndex, int cutoffDistanceSquared) {
-    std::vector<int> neighbours;
-    neighbours.reserve(100);
-
-    for (size_t i = 0; i < numberOfPoints; i++) {
-    if ((float)getDistanceSquared(atomIndex, i) < cutoffDistanceSquared)
-        neighbours.emplace_back(i);
-    }
-
-    return neighbours;
-}
-
-void DiscreteCluster::copyInto(DiscreteCluster& otherCluster) {
-    if(otherCluster.numberOfPoints != numberOfPoints)
-        otherCluster = DiscreteCluster(numberOfPoints);
-
-    std::memcpy(otherCluster.data, data, sizeof(DiscretePoint) * numberOfPoints);
-}
-
-
-
-ContinuousCluster::ContinuousCluster(int numberOfPoints) : numberOfPoints(numberOfPoints) { 
-    data = new ContinuousPoint[numberOfPoints];
-}
-
-ContinuousCluster::ContinuousCluster(DiscreteCluster& discreteCluster, float gridStepSize) : numberOfPoints(discreteCluster.numberOfPoints) {
-    data = new ContinuousPoint[numberOfPoints];
-
-    for (size_t i = 0; i < numberOfPoints; i++)
-    {
-        data[i] = ContinuousPoint{discreteCluster.getPoint(i), gridStepSize};
-    }
-}
-
-ContinuousCluster::ContinuousCluster(const ContinuousCluster& other) : numberOfPoints(other.numberOfPoints), data(new ContinuousPoint[other.numberOfPoints]) {
-    for (int i = 0; i < numberOfPoints; i++)
-    {
-        data[i] = other.data[i];
-    }
-}
-
-ContinuousCluster& ContinuousCluster::operator=(const ContinuousCluster& other) {
-    if (this == &other) return *this;
-
-    delete[] data;
-
-    numberOfPoints = other.numberOfPoints;
-    data = new ContinuousPoint[numberOfPoints];
-    for (int i = 0; i < numberOfPoints; i++)
-    {
-        data[i] = other.data[i];
-    }
-    
-    return *this;
-}
-
-ContinuousCluster::ContinuousCluster(ContinuousCluster&& other) noexcept : numberOfPoints(other.numberOfPoints), data(other.data) {
-    other.data = nullptr;
-    other.numberOfPoints = 0;
-}
-
-ContinuousCluster& ContinuousCluster::operator=(ContinuousCluster&& other) noexcept {
-    if (this == &other) return *this;
-
-    delete[] data;
-
-    numberOfPoints = other.numberOfPoints;
-    data = other.data;
-    other.data = nullptr;
-    other.numberOfPoints = 0;
-
-    return *this;
-}
-
-ContinuousCluster::~ContinuousCluster() {
-    delete[] data;
-    data = nullptr;
-}
-
-void ContinuousCluster::setPoint(int atomIndex, float x, float y, float z) {
-    data[atomIndex].x = x;
-    data[atomIndex].y = y;
-    data[atomIndex].z = z;
-}
-
-void ContinuousCluster::setPoint(int atomIndex, ContinuousPoint& point) {
-    data[atomIndex].x = point.x;
-    data[atomIndex].y = point.y;
-    data[atomIndex].z = point.z;
-}
-
-void ContinuousCluster::addToPoints(std::vector<ContinuousPoint>& points, float factor) {
-    for (int i = 0; i < numberOfPoints; i++) {
-        data[i] = data[i] + points[i] * factor;
-    }
-}
-
-ContinuousPoint& ContinuousCluster::getPoint(int atomIndex) {
-    return data[atomIndex];
-}
-
-float ContinuousCluster::getDistanceSquared(int atomIndex1, int atomIndex2) {
-    ContinuousPoint delta = data[atomIndex1] - data[atomIndex2];
-    return delta.lengthSquared();
-}
-
-float ContinuousCluster::getAtomEnergy(std::function<float(float)> potentialSquared, int atomIndex) {
-    float squaredDistance;
-    float result = 0.f;
-
-    for (size_t j = 0; j < numberOfPoints; j++)
-    {   
-        if(atomIndex != j) {
-            squaredDistance = getDistanceSquared(atomIndex, j);
-            result += potentialSquared(squaredDistance);
+        if (atomIndex != atom) {
+            const float squaredDistance = getDistanceSquared(atomIndex, atom);
+            total += lennardJonesSquaredPotential(squaredDistance);
         }
     }
-    return result;
+    return total;
 }
 
-float ContinuousCluster::getAtomEnergy(std::function<float(float)> potentialSquared, int atomIndex, std::vector<int>& atomsToConsider) {
-    float squaredDistance;
-    float result = 0.f;
+float ContinuousCluster::getClusterEnergy() const {
+    float total = 0.f;
 
-    for (size_t j = 0; j < atomsToConsider.size(); j++)
-    {
-        if(atomIndex != atomsToConsider[j]) {
-            squaredDistance = getDistanceSquared(atomIndex, atomsToConsider[j]);
-            result += potentialSquared(squaredDistance);
-        }
-    }
-    return result;
+    for (size_t i = 0; i < points.size(); i++)
+        total += getAtomEnergy(i);
+
+    return total * 0.5f;    
 }
 
-float ContinuousCluster::getClusterEnergy(std::function<float(float)> potentialSquared) {
-    float result = 0.f;
-
-    for (int i = 0; i < numberOfPoints; i++)
-        result += getAtomEnergy(potentialSquared, i);
-
-    return result * 0.5f;    
+void ContinuousCluster::copyTo(ContinuousCluster& otherCluster) const {
+    otherCluster.points = points;
 }
 
-void ContinuousCluster::copyInto(ContinuousCluster& otherCluster) {
-    if(otherCluster.numberOfPoints != numberOfPoints)
-        otherCluster = ContinuousCluster(numberOfPoints);
-
-    std::memcpy(otherCluster.data, data, sizeof(ContinuousCluster) * numberOfPoints);
-}
-
-void ContinuousCluster::writeClusterToFile(const std::string& filename) {
-    std::ofstream outFile(filename);
-    // Write points
-    for (size_t i = 0; i < numberOfPoints; i++) 
-    {
-        outFile << std::fixed << std::setprecision(8) 
-                << data[i].x << "::"
-                << data[i].y << "::" 
-                << data[i].z << "\n";
-
-    }
-    outFile.close();
-}
+size_t ContinuousCluster::size() const { return points.size(); }
