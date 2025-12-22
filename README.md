@@ -9,13 +9,6 @@ Cmake is used to handle the build process and dependencies. The single Cmake fil
     cmake ..
     cmake --build .
 
-Executing
-========
-the single-threaded executables can just be run directly. MPI however requires the following call to start the program.
-
-    mpirun --use-hwthread-cpus -np 8 main_mpi
-
-
 PROFILING
 ========
 I now use perf and hotspot. So for example gather data with 'perf record --call-graph dwarf ./main_debug', then run 'hotspot' to get the results.

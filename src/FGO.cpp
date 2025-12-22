@@ -52,11 +52,53 @@ MultiRunResult FuzzyGlobalOptimizer::runMultiple(size_t numRuns) {
         multiResult.allRuns.emplace_back(std::move(singleResult));
 
         if (singleResult.bestEnergy < multiResult.globalBestEnergy) {
-            
+            multiResult.globalBestEnergy = singleResult.bestEnergy;
+            multiResult.globalBestCluster = singleResult.bestCluster;
         }
     }
     
+    return multiResult;
 }
+
+
+// private functions
+// ===============================================
+void FuzzyGlobalOptimizer::initializeCluster(DiscreteCluster& cluster, std::mt19937& rng) {
+    cluster = DiscreteCluster(params.discreteGridSteps * params.discreteGridSteps, params.numberOfAtoms);
+
+    float spawningRadius = params.spawningRadiusFactor * std::pow(params.numberOfAtoms, 0.33f);
+
+    for (auto& point : cluster.points) {
+        point = getPointInSphere(rng, spawningRadius, DiscretePoint(0.f));
+    }
+}
+
+void FuzzyGlobalOptimizer::localDiscreteOptimization(DiscreteCluster& cluster) {
+
+}
+
+DiscretePoint FuzzyGlobalOptimizer::getPointInSphere(std::mt19937& rng, const float radius, const DiscretePoint& center, const bool allowZero) {
+    float u, theta, phi, r;
+    int x, y, z;
+
+    // generate random spherical coordinates
+    u = uniformDist(rng);
+    r = radius * std::cbrt(u);
+    theta = thetaDist(rng);
+    phi = phiDist(rng);
+
+    // convert to cartesian coordinates        
+    x = static_cast<int>(std::round(r * std::sin(phi) * std::cos(theta) / params.discreteGridSteps));
+    y = static_cast<int>(std::round(r * std::sin(phi) * std::sin(theta) / params.discreteGridSteps));
+    z = static_cast<int>(std::round(r * std::cos(phi) / params.discreteGridSteps));
+
+    if(!allowZero && x == 0 && y == 0 && z == 0)
+        getPointInSphere(rng, radius, center, allowZero);
+
+    return DiscretePoint{center.x + x, center.y + y, center.z + z};
+}
+
+
 
 /*
 void FuzzyGlobalOptimizer::runFGO() {

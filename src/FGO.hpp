@@ -39,7 +39,6 @@ struct FGOParameters {
     float realOptimizationTolerance = 1e-6f;
 };
 
-
 struct SingleRunResult {
     ContinuousCluster bestCluster;
     float bestEnergy = std::numeric_limits<float>::max();
@@ -99,6 +98,9 @@ private:
                     std::mt19937& rng);
 
     void localRealOptimization(ContinuousCluster& cluster);
+
+    DiscretePoint getPointInSphere(std::mt19937& rng, const float radius, const DiscretePoint& center, const bool allowZero = true);
+
 };
 
 /*

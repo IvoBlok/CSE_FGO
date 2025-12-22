@@ -27,8 +27,6 @@ private:
 
 template<typename Generator>
 size_t DiscreteDistribution::generate(Generator& gen) {
-    if (empty()) throw std::runtime_error("DiscreteDistribution is empty");
-    
     std::uniform_real_distribution<> uniform(0.0, 1.0);
     const size_t i = static_cast<size_t>(uniform(gen) * numberOfElements);
     return (uniform(gen) < probabilities[i]) ? i : alias[i];
