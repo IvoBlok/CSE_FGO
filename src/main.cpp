@@ -1,5 +1,4 @@
 #include <iostream>
-#include <chrono>
 
 #include "FGO.hpp"
 
@@ -160,7 +159,7 @@ float clusterBestEnergies[151] = {
 int main(int argc, char **argv) {
 
     FGOParameters params;
-    params.numberOfAtoms = 2;
+    params.numberOfAtoms = 25;
     params.spawningRadiusFactor = 0.55;
 
     FuzzyGlobalOptimizer optimizer(params);

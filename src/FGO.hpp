@@ -104,20 +104,4 @@ private:
     size_t localDiscreteFrozenOptimization(DiscreteCluster& cluster, const size_t frozenIndex);
 };
 
-/*
-
-    void localRealOptimization(ContinuousCluster& cluster);
-
-    void discreteMonteCarlo(float activeEnergy, float targetEnergy, float targetSigma, float acceptanceEnergy, float convergenceFactor);
-
-    DiscretePoint generateUniformRandomPointInSphere(float radius, DiscretePoint center, bool allowZero);
-
-    void setAtomInRandomSphere(DiscreteCluster& cluster, int atomIndex, float radius, DiscretePoint center, bool allowZero);
-
-    void generateInitialCluster(DiscreteCluster& cluster, float radius);
-
-    int getRandomAtomByWeights(std::vector<float>& atomWeights);
-};
-*/
-
 #endif // FUZZY_GLOBAL_OPTIMIZER_H
