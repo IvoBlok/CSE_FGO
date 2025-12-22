@@ -15,6 +15,10 @@ I now use perf and hotspot. So for example gather data with 'perf record --call-
 
 TODO
 =========
+ - Implement localRealOptimization
+ - Gather stats in the range of n=2...50 and create code to plot this (as with the python code in the rust example)
+ - parallelization
+ - instead of an LJLookup, which as seen before likely has terrible cache performance, maybe just compute it for various points, then interpolate with a simpler function. this can probably be further improved by using SIMD instructions in this operation, since for each AtomEnergy we're doing many independent LJ potential evaluations.
  - Only check energy with neighbours in the localDiscreteFrozenOptimization steps
  - Any smart way of precalculating the potentials at discrete distances should drastically improve performance; given that the cache layout is good enough for it to be worth it. 
  - In a similar vein, in many cases we don't need to calculate clusterPotential from scratch, since generally only 1 or 2 atoms got moved; we just need to calculate the change these moves caused

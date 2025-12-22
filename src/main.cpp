@@ -163,7 +163,13 @@ int main(int argc, char **argv) {
     params.spawningRadiusFactor = 0.55;
 
     FuzzyGlobalOptimizer optimizer(params);
-
     auto result = optimizer.runMultiple(100);
-    std::cout << "Best energy: " << result.globalBestEnergy << "\n";
+
+    
+    int correctFinds = 0;
+    for (const auto& run : result.allRuns)
+        if (run.bestCluster.getClusterEnergy() * 1.01 < clusterBestEnergies[params.numberOfAtoms])
+            correctFinds++;
+    
+    std::cout << "Success rate: " << correctFinds << " / " << result.allRuns.size() << "\n";
 }
