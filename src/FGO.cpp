@@ -101,7 +101,7 @@ void FuzzyGlobalOptimizer::discreteMonteCarlo(float activeEnergy, float targetEn
         // make a new candidate cluster, with the active atomed moved to the area around the target atom, in a sphere of radius 1.
         // Since the problem is tackled in reduced units, a distance of 1 ( or 2^(1/6)) is the optimum distance between two atoms (assuming no other atoms are in the cluster).
         currentCluster.copyTo(candidateCluster);
-        setAtomInRandomSphere(candidateCluster, activeAtom, 1.f, currentCluster.getPoint(targetAtom), false);
+        setAtomInRandomSphere(candidateCluster, activeAtom, 1.0f, currentCluster.getPoint(targetAtom), false);
 
         // locally optimize the modified cluster in the discrete space, while holding the rest of the cluster still
         localDiscreteFrozenOptimization(candidateCluster, activeAtom);
@@ -228,12 +228,12 @@ void FuzzyGlobalOptimizer::localRealOptimization(ContinuousCluster& cluster) {
                     distance = std::sqrt(distanceSquared);
 
                     direction = cluster.getPoint(i) - cluster.getPoint(j);
-                    direction = (direction * (1.f / distance)) * lennardJonesDerivative(distance);
+                    direction = (direction * (1.0f / distance)) * lennardJonesDerivative(distance);
                     gradient[i] = gradient[i] + direction;
                 }
             }
             // limit the gradient length to a max of 100
-            gradient[i] = gradient[i] * (1.f / std::sqrt(gradient[i].lengthSquared())) * std::fmin(100.f, std::sqrt(gradient[i].lengthSquared()));
+            gradient[i] = gradient[i] * (1.0f / std::sqrt(gradient[i].lengthSquared())) * std::fmin(100.f, std::sqrt(gradient[i].lengthSquared()));
         }
         
         // create two new clusters, by moving in the opposite direction of the gradient

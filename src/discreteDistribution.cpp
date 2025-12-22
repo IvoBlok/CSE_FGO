@@ -1,63 +1,57 @@
 #include "discreteDistribution.hpp"
+#include <algorithm>
+#include <numeric>
 
-DiscreteDistribution::DiscreteDistribution() { }
+DiscreteDistribution::DiscreteDistribution(size_t size) 
+    : numberOfElements(size),
+      probabilities(size),
+      alias(size) {
 
-DiscreteDistribution::DiscreteDistribution(int size) {
-    uniformDistribution = std::uniform_real_distribution<>(0.0, 1.0);
-
-    numberOfElements = size;
-    std::vector<float> probabilities(numberOfElements);
-    std::vector<int> alias(numberOfElements);
-    
-    small.reserve(numberOfElements);
-    large.reserve(numberOfElements);
-
-    this->probabilities = std::move(probabilities);
-    this->alias = std::move(alias);
-}
-
-DiscreteDistribution::DiscreteDistribution(std::vector<float>& weights) {
-    uniformDistribution = std::uniform_real_distribution<>(0.0, 1.0);
-
-    numberOfElements = weights.size();
-    std::vector<float> probabilities(numberOfElements);
-    std::vector<int> alias(numberOfElements);
-    
-    this->probabilities = std::move(probabilities);
-    this->alias = std::move(alias);
-
+    std::vector<float> weights(size, 1.0f);
     updateDistribution(weights);
 }
 
-void DiscreteDistribution::updateDistribution(std::vector<float>& weights) {
-    if (numberOfElements != weights.size())
-        throw std::runtime_error("distribution update weights is not of equal length as constructor weights!");
+DiscreteDistribution::DiscreteDistribution(const std::vector<float>& weights) 
+    : numberOfElements(weights.size()),
+      probabilities(weights.size()),
+      alias(weights.size()) {
+    updateDistribution(weights);
+}
+
+void DiscreteDistribution::updateDistribution(const std::vector<float>& weights) {
+    if (weights.size() != numberOfElements) {
+        numberOfElements = weights.size();
+        probabilities.resize(numberOfElements);
+        alias.resize(numberOfElements);
+    }
+    
+    if (numberOfElements == 0) return;
+
+    // clear workspace
+    small.clear();
+    large.clear();
 
     // normalize weights
     float sum = 0.f;
     for (float w : weights) sum += w;
-    for (int i = 0; i < numberOfElements; i++) probabilities[i] = weights[i] * numberOfElements / sum;
+    for (size_t i = 0; i < numberOfElements; i++) probabilities[i] = weights[i] * static_cast<float>(numberOfElements) / sum;
 
     // create alias table
-    for (int i = 0; i < numberOfElements; i++) {
-        if (probabilities[i] < 1.f) small.emplace_back(i);
+    for (size_t i = 0; i < numberOfElements; i++) {
+        if (probabilities[i] < 1.0f) small.emplace_back(i);
         else large.emplace_back(i);
     }
 
     while(!small.empty() && !large.empty()) {
-        int s = small.back(), l = large.back();
+        const size_t s = small.back();
+        const size_t l = large.back();
         small.pop_back();
         large.pop_back();
-
+        
         alias[s] = l;
-        probabilities[l] = probabilities[l] + probabilities[s] - 1.f;
+        probabilities[l] = probabilities[l] + probabilities[s] - 1.0f;
 
-        if (probabilities[l] < 1.f) small.emplace_back(l);
+        if (probabilities[l] < 1.0f) small.emplace_back(l);
         else large.emplace_back(l);
     }
-}
-
-int DiscreteDistribution::generate(std::minstd_rand0& gen) {
-    int i = static_cast<int>(uniformDistribution(gen) * probabilities.size());
-    return (uniformDistribution(gen) < probabilities[i]) ? i : alias[i];
 }

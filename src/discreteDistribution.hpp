@@ -4,25 +4,34 @@
 #include <vector>
 #include <random>
 #include <stdexcept>
+#include <cstddef>
 
 class DiscreteDistribution {
 public:
-    DiscreteDistribution();
-    DiscreteDistribution(int size);
-    DiscreteDistribution(std::vector<float>& weights);
+    DiscreteDistribution() = default;
+    explicit DiscreteDistribution(size_t size);
+    explicit DiscreteDistribution(const std::vector<float>& weights);
 
-    void updateDistribution(std::vector<float>& weights);
+    void updateDistribution(const std::vector<float>& weights);
 
-    int generate(std::minstd_rand0& gen);
+    template<typename Generator>
+    size_t generate(Generator& gen);
 
 private:
-    std::vector<int> alias;
+    std::vector<size_t> alias;
     std::vector<float> probabilities;
-    int numberOfElements;
+    size_t numberOfElements = 0;
     
-    std::vector<int> small, large;
-
-    std::uniform_real_distribution<> uniformDistribution;
+    std::vector<size_t> small, large;
 };
+
+template<typename Generator>
+size_t DiscreteDistribution::generate(Generator& gen) {
+    if (empty()) throw std::runtime_error("DiscreteDistribution is empty");
+    
+    std::uniform_real_distribution<> uniform(0.0, 1.0);
+    const size_t i = static_cast<size_t>(uniform(gen) * numberOfElements);
+    return (uniform(gen) < probabilities[i]) ? i : alias[i];
+}
 
 #endif
