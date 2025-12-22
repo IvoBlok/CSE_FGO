@@ -27,7 +27,7 @@ struct FGOParameters {
         float targetEnergy;
         float targetSigma;
         float acceptanceEnergy;
-        float convergenceEnergy;
+        float convergenceFactor;
     };
 
     DMCParameters dmcLayer1{1.0f, -4.1f, 1.25f, 0.4f, 2.5f};
@@ -93,7 +93,7 @@ private:
 
     void localDiscreteOptimization(DiscreteCluster& cluster);
 
-    void runDMCLayer(DiscreteCluster& startCluster, 
+    void runDMCLayer(RunState& state, 
                     const FGOParameters::DMCParameters& dmcParams,
                     std::mt19937& rng);
     
@@ -102,48 +102,10 @@ private:
     // helper functions for the main algorithm steps above
     DiscretePoint getPointInSphere(std::mt19937& rng, const float radius, const DiscretePoint& center, const bool allowZero = true);
 
-    size_t localDiscreteFrozenOptimization(DiscreteCluster& cluster, size_t frozenIndex);
+    size_t localDiscreteFrozenOptimization(DiscreteCluster& cluster, const size_t frozenIndex);
 };
 
 /*
-class FuzzyGlobalOptimizer {
-public:
-    const size_t numberOfAtoms;
-
-    float discreteGridSteps;
-    float discreteCutoffDistance;
-
-    float bestClusterEnergy;
-    int bestClusterIndex;
-
-    DiscreteCluster currentCluster;
-    std::vector<DiscreteCluster> candidateClusters;
-
-private:
-    float spawningRadius;
-    int discreteGridPointCount;
-    float gradientStepSize;
-
-    const std::vector<float>& LJLookup;
-
-    std::random_device rd;
-    std::minstd_rand0 gen;
-    std::uniform_real_distribution<> dist;         // For uniform sampling
-    std::uniform_real_distribution<> distTheta; // Azimuthal angle
-    std::uniform_real_distribution<> distPhi;     // Polar angle
-
-    DiscreteDistribution discreteDistribution;
-
-public:
-    FuzzyGlobalOptimizer(size_t numberOfAtoms,float discreteGridSteps = 0.02f, float discreteCutoffDistance = 2.1f, float gradientStepSize = 0.001f);
-
-    void runFGO();
-
-private: 
-    void localDiscreteOptimization(DiscreteCluster& cluster);
-
-    int localDiscreteFrozenOptimization(DiscreteCluster& cluster, int nonFrozenAtom);
-    int localDiscreteFrozenOptimization(DiscreteCluster& cluster, int nonFrozenAtom, std::vector<int>& neighbours);
 
     void localRealOptimization(ContinuousCluster& cluster);
 

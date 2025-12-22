@@ -167,5 +167,4 @@ int main(int argc, char **argv) {
 
     auto result = optimizer.runMultiple(100);
     std::cout << "Best energy: " << result.globalBestEnergy << "\n";
-
 }
