@@ -109,9 +109,8 @@ void FuzzyGlobalOptimizer::initializeCluster(Cluster& cluster, std::mt19937& rng
 
     float spawningRadius = params.spawningRadiusFactor * std::pow(params.numberOfAtoms, 0.33f);
 
-    for (auto& point : cluster.points) {
-        point = getPointInSphere(rng, spawningRadius, Point(0.f));
-    }
+    for (size_t i = 0; i < params.numberOfAtoms; i++)
+        setPointInSphere(cluster, i, rng, spawningRadius, 0.f, 0.f, 0.f);
 }
 
 void FuzzyGlobalOptimizer::localDiscreteOptimization(Cluster& cluster) {
@@ -149,7 +148,7 @@ void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMC
         size_t targetAtom = atomSelector.generate(rng);
 
         currCandidate.first.copyTo(candidate);
-        candidate.getPoint(activeAtom) = getPointInSphere(rng, 1.0f, candidate.getPoint(targetAtom), false);
+        setPointInSphere(candidate, activeAtom, rng, 1.0f, candidate.x[targetAtom], candidate.y[targetAtom], candidate.z[targetAtom], false);
 
         localDiscreteFrozenOptimization(candidate, activeAtom);
 
@@ -171,115 +170,147 @@ void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMC
 }
 
 void FuzzyGlobalOptimizer::localRealOptimization(std::pair<Cluster, float>& candidate) {
-    std::vector<Point> gradient(params.numberOfAtoms);
+    Cluster& cluster = candidate.first;
+    const size_t n = params.numberOfAtoms;
+    const float step = params.gradientStepSize;
 
-    float distance, distanceSquared;
-    Point direction;
+    std::vector<float> gradX(n);
+    std::vector<float> gradY(n);
+    std::vector<float> gradZ(n);
 
-    Cluster gradientCluster1 = Cluster(params.numberOfAtoms);
-    Cluster gradientCluster2 = Cluster(params.numberOfAtoms);
-
-    float newEnergy1, newEnergy2;
-    float lastOriginalEnergy = std::numeric_limits<float>::infinity();
+    static thread_local Cluster gradCluster1, gradCluster2;
+    if (gradCluster1.n != n) gradCluster1 = Cluster(n);
+    if (gradCluster2.n != n) gradCluster2 = Cluster(n);
 
     for (size_t iter = 0; iter < params.maxRealOptimizationIterations; iter++)
     {
-        for (size_t i = 0; i < params.numberOfAtoms; i++)
-        {
-            gradient[i] = Point(0.0f);
+        // calculate gradient
+        std::fill(gradX.begin(), gradX.end(), 0.0f);
+        std::fill(gradY.begin(), gradY.end(), 0.0f);
+        std::fill(gradZ.begin(), gradZ.end(), 0.0f);
 
-            for (size_t j = 0; j < params.numberOfAtoms; j++)
+        for (size_t i = 0; i < n; i++)
+        {
+            const float xi = cluster.x[i];
+            const float yi = cluster.y[i];
+            const float zi = cluster.z[i];
+
+            for (size_t j = i + 1; j < n; j++)
             {
-                if (j != i) {
-                    distanceSquared = candidate.first.getDistanceSquared(i, j);
-                    distance = std::sqrt(distanceSquared);
+                const float dx = xi - cluster.x[j];
+                const float dy = yi - cluster.y[j];
+                const float dz = zi - cluster.z[j];
 
-                    direction = candidate.first.getPoint(i) - candidate.first.getPoint(j);
-                    direction = (direction / distance) * lennardJonesDerivative(distance);
-                    gradient[i] = gradient[i] + direction;
-                }
+                const float r = dx*dx + dy*dy + dz*dz;
+                const float inv_r = 1.0 / (std::sqrt(r));
+                const float force = lennardJonesDerivative(r) * inv_r;
+
+                gradX[i] += dx * force;
+                gradY[i] += dy * force;
+                gradZ[i] += dz * force;
+
+                gradX[j] -= dx * force;
+                gradY[j] -= dy * force;
+                gradZ[j] -= dz * force;
             }
-            // limit the length of each gradient element to a max of 100 (TODO fix this, such that it uses the full gradient length instead of element-wise)
-            gradient[i] = (gradient[i] / std::sqrt(gradient[i].lengthSquared())) * std::fmin(100.f, std::sqrt(gradient[i].lengthSquared()));
+        }
+
+        // line search
+        for (size_t i = 0; i < n; ++i) {
+            gradCluster1.x[i] = cluster.x[i] - gradX[i] * step;
+            gradCluster1.y[i] = cluster.y[i] - gradY[i] * step;
+            gradCluster1.z[i] = cluster.z[i] - gradZ[i] * step;
             
-        }
-        
-        for (size_t i = 0; i < params.numberOfAtoms; i++)
-        {
-            gradientCluster1.getPoint(i) = candidate.first.getPoint(i) - gradient[i] * params.gradientStepSize;
-            gradientCluster2.getPoint(i) = candidate.first.getPoint(i) - gradient[i] * (2.0f * params.gradientStepSize);
+            gradCluster2.x[i] = cluster.x[i] - gradX[i] * (2.0f * step);
+            gradCluster2.y[i] = cluster.y[i] - gradY[i] * (2.0f * step);
+            gradCluster2.z[i] = cluster.z[i] - gradZ[i] * (2.0f * step);
         }
 
-        newEnergy1 = gradientCluster1.getClusterEnergy();
-        newEnergy2 = gradientCluster2.getClusterEnergy();
+        const float E0 = candidate.second;
+        const float E1 = gradCluster1.getClusterEnergy();
+        const float E2 = gradCluster2.getClusterEnergy();
         
-        if (std::abs(2*newEnergy2 - 4*newEnergy1 + 2*candidate.second) < 1e-7f)
-            break;
+        // interpolate quadratic equation
+        const float denom = 2.0f * E2 - 4.0f * E1 + 2.0f * E0;
+        if (std::abs(denom) < 1e-7f) break;
 
-        float optimalDeflectionFactor = (4*newEnergy1 - newEnergy2 - 3*candidate.second) / (-4*newEnergy1 + 2*newEnergy2 + 2*candidate.second);
-        candidate.first.addToPoints(gradient, params.gradientStepSize * optimalDeflectionFactor);
+        const float alpha = (-3.0f * E0 + 4.0f * E1 - E2) / denom;
+        
+        // move to minimum of fitted quadratic
+        for (size_t i = 0; i < n; ++i) {
+            cluster.x[i] -= gradX[i] * (step * alpha);
+            cluster.y[i] -= gradY[i] * (step * alpha);
+            cluster.z[i] -= gradZ[i] * (step * alpha);
+        }
 
-        float oldEnergy = candidate.second;
-        candidate.second = candidate.first.getClusterEnergy();
-
-        if (std::abs(candidate.second - oldEnergy) < 1e-6f)
-            break;
+        // convergence condition
+        candidate.second = cluster.getClusterEnergy();
+        if (std::abs(candidate.second - E0) < 1e-6f) break;
     }
 }
 
 // helper functions
-Point FuzzyGlobalOptimizer::getPointInSphere(std::mt19937& rng, const float radius, const Point& center, const bool allowZero) {
-    float u, theta, phi, r;
-    int x, y, z;
-
+void FuzzyGlobalOptimizer::setPointInSphere(Cluster& cluster, size_t index, std::mt19937& rng, float radius, float cx, float cy, float cz, bool allowZero) {
     // generate random spherical coordinates
-    u = uniformDist(rng);
-    r = radius * std::cbrt(u);
-    theta = thetaDist(rng);
-    phi = phiDist(rng);
+    const float u = uniformDist(rng);
+    const float r = radius * std::cbrt(u);
+    const float theta = thetaDist(rng);
+    const float phi = phiDist(rng);
 
     // convert to cartesian coordinates    
-    x = static_cast<int>(std::round(r * std::sin(phi) * std::cos(theta) / params.gridSpacing));
-    y = static_cast<int>(std::round(r * std::sin(phi) * std::sin(theta) / params.gridSpacing));
-    z = static_cast<int>(std::round(r * std::cos(phi) / params.gridSpacing));
+    const int dx = static_cast<int>(std::round(r * std::sin(phi) * std::cos(theta) / params.gridSpacing));
+    const int dy = static_cast<int>(std::round(r * std::sin(phi) * std::sin(theta) / params.gridSpacing));
+    const int dz = static_cast<int>(std::round(r * std::cos(phi) / params.gridSpacing));
 
-    if(!allowZero && x == 0 && y == 0 && z == 0)
-        getPointInSphere(rng, radius, center, allowZero);
+    if(!allowZero && dx == 0 && dy == 0 && dz == 0) {
+        setPointInSphere(cluster, index, rng, radius, cx, cy, cz, allowZero);
+        return;
+    }
 
-    return Point{center.x + x * params.gridSpacing, center.y + y * params.gridSpacing, center.z + z * params.gridSpacing};
+    cluster.x[index] = cx + dx * params.gridSpacing;
+    cluster.y[index] = cy + dy * params.gridSpacing;
+    cluster.z[index] = cz + dz * params.gridSpacing;
 }
 
 size_t FuzzyGlobalOptimizer::localDiscreteFrozenOptimization(Cluster& cluster, const size_t freeIndex) {
-    float oldAtomEnergy = cluster.getAtomEnergy(freeIndex);
-    int stepsSinceChange, numChanges, axis;
-    stepsSinceChange = numChanges = axis = 0;
+    float& x = cluster.x[freeIndex];
+    float& y = cluster.y[freeIndex];
+    float& z = cluster.z[freeIndex];
 
-    Point& freePoint = cluster.getPoint(freeIndex);
+    float currentEnergy = cluster.getAtomEnergy(freeIndex);
+    size_t numChanges = 0;
+    bool improved = true;
 
-    while (stepsSinceChange < 3) {
-        axis = (++axis) % 3;
-        freePoint[axis] += params.gridSpacing;
-        float newAtomEnergy = cluster.getAtomEnergy(freeIndex);
+    const float moves[6][3] = {
+        {params.gridSpacing, 0, 0},
+        {-params.gridSpacing, 0, 0},
+        {0, params.gridSpacing, 0},
+        {0, -params.gridSpacing, 0},
+        {0, 0, params.gridSpacing},
+        {0, 0, -params.gridSpacing}
+    };
 
-        if (newAtomEnergy - oldAtomEnergy < 0.0f) {
-            oldAtomEnergy = newAtomEnergy;
-            stepsSinceChange = 0;
-            numChanges++;
-            continue;
+    while (improved) {
+        improved = false;
+
+        for (int moveIdx = 0; moveIdx < 6; ++moveIdx) {
+            x += moves[moveIdx][0];
+            y += moves[moveIdx][1];
+            z += moves[moveIdx][2];
+
+            float newEnergy = cluster.getAtomEnergy(freeIndex);
+
+            if (newEnergy - currentEnergy < 0.0f) {
+                currentEnergy = newEnergy;
+                improved = true;
+                numChanges++;
+                break;
+            } else {
+                x -= moves[moveIdx][0];
+                y -= moves[moveIdx][1];
+                z -= moves[moveIdx][2];
+            }
         }
-
-        freePoint[axis] -= 2 * params.gridSpacing;
-        newAtomEnergy = cluster.getAtomEnergy(freeIndex);
-
-        if (newAtomEnergy - oldAtomEnergy < 0.0f) {
-            oldAtomEnergy = newAtomEnergy;
-            stepsSinceChange = 0;
-            numChanges++;
-            continue;
-        }
-
-        freePoint[axis] += 1 * params.gridSpacing;
-        stepsSinceChange++;
     }
 
     return numChanges;

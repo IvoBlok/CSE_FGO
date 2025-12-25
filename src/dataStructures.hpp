@@ -8,28 +8,8 @@ float lennardJonesPotential(float distance);
 float lennardJonesSquaredPotential(float squaredDistance);
 float lennardJonesDerivative(float distance);
 
-
-struct Point {
-    float x, y, z;
-
-    Point() = default;
-    Point(const float x, const float y, const float z);
-    explicit Point(const float val);
-
-    Point operator+(const Point& other) const;
-    Point operator-(const Point& other) const;
-    Point operator*(float scalar) const;
-    Point operator/(float scalar) const;
-
-    float& operator[](const size_t index);
-    const float& operator[](const size_t index) const;
-
-    float lengthSquared() const;
-};
-
-
 struct Cluster {
-    std::vector<Point> points;
+    std::vector<float> x, y, z;
     size_t n = 0;
     
     Cluster() = default;
@@ -38,18 +18,12 @@ struct Cluster {
     Cluster(const Cluster& other) = default;
     Cluster& operator=(const Cluster& other) = default;
 
-    void setPoint(const size_t atomIndex, const float x, const float y, const float z);
-    void setPoint(const size_t atomIndex, const Point& point);
+    void setPoint(size_t atomIndex, float xVal, float yVal, float zVal);
 
-    Point& getPoint(const size_t atomIndex);
-    const Point& getPoint(const size_t atomIndex) const;
+    float getDistanceSquared(size_t atomIndex1, size_t atomIndex2) const;
 
-    void addToPoints(const std::vector<Point>& deltas, const float factor);
-
-    float getDistanceSquared(const size_t atomIndex1, const size_t atomIndex2) const;
-
-    float getAtomEnergy(const size_t atomIndex) const;
-    float getAtomEnergy(const size_t atomIndex, const std::vector<size_t>& atomsToConsider) const;
+    float getAtomEnergy(size_t atomIndex) const;
+    float getAtomEnergy(size_t atomIndex, const std::vector<size_t>& atomsToConsider) const;
 
     float getClusterEnergy() const;
     
