@@ -37,7 +37,7 @@ SingleRunResult FuzzyGlobalOptimizer::runSingle(std::mt19937& rng) {
     startCandidate.second = startCandidate.first.getClusterEnergy();
 
     auto startDMC = std::chrono::high_resolution_clock::now();
-    //runDMCLayer(state, params.dmcLayer1, rng);
+    runDMCLayer(state, params.dmcLayer1, rng);
     auto endDMC = std::chrono::high_resolution_clock::now();
 
     // TODO DMC2
@@ -112,6 +112,53 @@ void FuzzyGlobalOptimizer::initializeCluster(Cluster& cluster, std::mt19937& rng
 
     for (size_t i = 0; i < params.numberOfAtoms; i++)
         setPointInSphere(cluster, i, rng, spawningRadius, 0.f, 0.f, 0.f);
+}
+
+void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMCParameters& dmcParams, std::mt19937& rng) {
+    size_t stepsSinceImprovement = 0;
+
+    Cluster candidate{params.numberOfAtoms};
+
+    std::vector<float> atomEnergies(params.numberOfAtoms);
+    std::vector<float> activeWeights(params.numberOfAtoms);
+    std::vector<float> targetWeights(params.numberOfAtoms);
+
+    while (stepsSinceImprovement < (size_t)(params.numberOfAtoms * params.numberOfAtoms * dmcParams.convergenceFactor)) {
+        const auto& currCandidate = state.candidates.back();
+
+        for (size_t i = 0; i < params.numberOfAtoms; i++)
+        {
+            atomEnergies[i] = currCandidate.first.getAtomEnergy(i);
+
+            activeWeights[i] = std::exp(atomEnergies[i] / dmcParams.activeEnergy);
+            targetWeights[i] = std::exp(-0.5 * std::pow(atomEnergies[i] - dmcParams.targetEnergy, 2) / std::pow(dmcParams.targetSigma, 2));
+        }
+        
+        atomSelector.updateDistribution(activeWeights);
+        size_t activeAtom = atomSelector.generate(rng);
+        atomSelector.updateDistribution(targetWeights);
+        size_t targetAtom = atomSelector.generate(rng);
+
+        currCandidate.first.copyTo(candidate);
+        setPointInSphere(candidate, activeAtom, rng, 1.0f, candidate.x[targetAtom], candidate.y[targetAtom], candidate.z[targetAtom], false);
+
+        localDiscreteFrozenOptimization(candidate, activeAtom);
+
+        float deltaAtomEnergy = candidate.getAtomEnergy(activeAtom) - atomEnergies[activeAtom];
+
+        stepsSinceImprovement++;
+        float acceptanceThreshold = uniformDist(rng);
+        if (deltaAtomEnergy < 0.0f || acceptanceThreshold < std::exp(-deltaAtomEnergy / dmcParams.acceptanceEnergy)) {
+            localDiscreteOptimization(candidate);
+
+            float candidateEnergy = candidate.getClusterEnergy();
+            if(candidateEnergy < state.candidates[state.bestIndex].second) {
+                state.bestIndex = state.candidates.size();
+                state.candidates.emplace_back(candidate, candidateEnergy);
+                stepsSinceImprovement = 0;
+            }
+        }
+    }
 }
 
 void FuzzyGlobalOptimizer::localDiscreteOptimization(Cluster& cluster) {
