@@ -160,12 +160,23 @@ const float clusterBestEnergies[151] = {
 
 using json = nlohmann::json;
 
-void to_json(json& j, const Point& p) {
-    j = json{{"x", p.x}, {"y", p.y}, {"z", p.z}};
+json create_points_json(const std::vector<float>& xs, const std::vector<float>& ys, const std::vector<float>& zs) {
+    json points_array = json::array();
+    
+    size_t n = std::min({xs.size(), ys.size(), zs.size()});
+    for (size_t i = 0; i < n; i++) {
+        points_array.push_back({
+            {"x", xs[i]},
+            {"y", ys[i]},
+            {"z", zs[i]}
+        });
+    }
+    
+    return points_array;
 }
 
 void to_json(json& j, const Cluster& cluster) {
-    j = json{{"points", cluster.points}};
+    j = json{{"points", create_points_json(cluster.x, cluster.y, cluster.z)}};
 }
 
 void to_json(json& j, const SingleRunResult& result) {

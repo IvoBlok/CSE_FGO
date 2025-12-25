@@ -94,14 +94,8 @@ private:
 
     void localDiscreteOptimization(Cluster& cluster);
 
-    void runDMCLayer(RunState& state, 
-                    const FGOParameters::DMCParameters& dmcParams,
-                    std::mt19937& rng);
-    
-    void localRealOptimization(std::pair<Cluster, float>& candidate);
-
     // helper functions for the main algorithm steps above
-    Point getPointInSphere(std::mt19937& rng, const float radius, const Point& center, const bool allowZero = true);
+    void setPointInSphere(Cluster& cluster, size_t index, std::mt19937& rng, float radius, float cx, float cy, float cz, bool allowZero = true);
 
     size_t localDiscreteFrozenOptimization(Cluster& cluster, const size_t frozenIndex);
 };
