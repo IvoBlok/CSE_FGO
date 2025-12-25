@@ -30,11 +30,11 @@ SingleRunResult FuzzyGlobalOptimizer::runSingle(std::mt19937& rng) {
 
     auto startTotal = std::chrono::high_resolution_clock::now();
 
-    auto& candidate = state.candidates.emplace_back(Cluster(), std::numeric_limits<float>::infinity());
+    auto& startCluster = state.candidates.emplace_back(Cluster(), std::numeric_limits<float>::infinity());
 
-    initializeCluster(candidate.first, rng);
-    localDiscreteOptimization(candidate.first);
-    candidate.second = candidate.first.getClusterEnergy();
+    initializeCluster(startCluster.first, rng);
+    localDiscreteOptimization(startCluster.first);
+    startCluster.second = startCluster.first.getClusterEnergy();
 
     auto startDMC = std::chrono::high_resolution_clock::now();
     runDMCLayer(state, params.dmcLayer1, rng);
@@ -178,9 +178,7 @@ void FuzzyGlobalOptimizer::localRealOptimization(std::pair<Cluster, float>& cand
     std::vector<float> gradY(n);
     std::vector<float> gradZ(n);
 
-    static thread_local Cluster gradCluster1, gradCluster2;
-    if (gradCluster1.n != n) gradCluster1 = Cluster(n);
-    if (gradCluster2.n != n) gradCluster2 = Cluster(n);
+    float currEnergy = candidate.second;
 
     for (size_t iter = 0; iter < params.maxRealOptimizationIterations; iter++)
     {
@@ -214,38 +212,47 @@ void FuzzyGlobalOptimizer::localRealOptimization(std::pair<Cluster, float>& cand
                 gradZ[j] -= dz * force;
             }
         }
+        
+        // calculate gradient norm
+        float gradNorm = 0.0f;
+        for (size_t i = 0; i < n; i++)
+            gradNorm += gradX[i]*gradX[i] + gradY[i]*gradY[i] + gradZ[i]*gradZ[i];
+        
+        gradNorm = std::sqrt(gradNorm);
 
-        // line search
-        for (size_t i = 0; i < n; ++i) {
-            gradCluster1.x[i] = cluster.x[i] - gradX[i] * step;
-            gradCluster1.y[i] = cluster.y[i] - gradY[i] * step;
-            gradCluster1.z[i] = cluster.z[i] - gradZ[i] * step;
+        // initial step, with damping
+        float alpha = 0.1f / (gradNorm + 1.0f);
+
+        // backtracking line search
+        for (int ls = 0; ls < 8; ls++) {
+            for (size_t i = 0; i < n; i++)
+            {
+                cluster.x[i] -= alpha * gradX[i];
+                cluster.y[i] -= alpha * gradY[i];
+                cluster.z[i] -= alpha * gradZ[i];
+            }
             
-            gradCluster2.x[i] = cluster.x[i] - gradX[i] * (2.0f * step);
-            gradCluster2.y[i] = cluster.y[i] - gradY[i] * (2.0f * step);
-            gradCluster2.z[i] = cluster.z[i] - gradZ[i] * (2.0f * step);
-        }
+            // Use armijo condition with gradient as the search direction to check for sufficient decrease
+            float newEnergy = cluster.getClusterEnergy();
+            if (newEnergy < currEnergy - 0.001f * alpha * gradNorm * gradNorm) {
+                currEnergy = newEnergy;
+                break;
+            }
 
-        const float E0 = candidate.second;
-        const float E1 = gradCluster1.getClusterEnergy();
-        const float E2 = gradCluster2.getClusterEnergy();
-        
-        // interpolate quadratic equation
-        const float denom = 2.0f * E2 - 4.0f * E1 + 2.0f * E0;
-        if (std::abs(denom) < 1e-7f) break;
-
-        const float alpha = (-3.0f * E0 + 4.0f * E1 - E2) / denom;
-        
-        // move to minimum of fitted quadratic
-        for (size_t i = 0; i < n; ++i) {
-            cluster.x[i] -= gradX[i] * (step * alpha);
-            cluster.y[i] -= gradY[i] * (step * alpha);
-            cluster.z[i] -= gradZ[i] * (step * alpha);
+            // if the step was rejected, revert the step and reduce alpha (TODO instead change the cluster data to the new ones, instead of resetting then writing)
+            for (size_t i = 0; i < n; i++) {
+                cluster.x[i] += alpha * gradX[i];
+                cluster.y[i] += alpha * gradY[i];
+                cluster.z[i] += alpha * gradZ[i];
+            }
+            alpha *= 0.5f;
         }
 
         // convergence condition
-        candidate.second = cluster.getClusterEnergy();
-        if (std::abs(candidate.second - E0) < 1e-6f) break;
+        if (gradNorm < 1e-4f || std::abs(candidate.second - currEnergy) < 1e-8f)
+            break;
+
+        candidate.second = currEnergy;
     }
 }
 
