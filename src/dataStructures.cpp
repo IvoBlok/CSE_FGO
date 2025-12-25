@@ -48,7 +48,7 @@ float Cluster::getDistanceSquared(const size_t atomIndex1, const size_t atomInde
     return dx*dx + dy*dy + dz*dz;
 }
 
-float Cluster::getAtomEnergy(const size_t atomIndex) const {
+float Cluster::getAtomEnergy(size_t atomIndex) const {
     float total = 0.f;
 
     for (size_t j = 0; j < n; j++)
@@ -61,7 +61,7 @@ float Cluster::getAtomEnergy(const size_t atomIndex) const {
     return total;
 }
 
-float Cluster::getAtomEnergy(const size_t atomIndex, const std::vector<size_t>& atomsToConsider) const {
+float Cluster::getAtomEnergy(size_t atomIndex, const std::vector<size_t>& atomsToConsider) const {
     float total = 0.f;
 
     for (const size_t& atom : atomsToConsider)

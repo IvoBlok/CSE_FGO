@@ -21,10 +21,10 @@ struct Cluster {
 
     void setPoint(const size_t atomIndex, const float xVal, const float yVal, const float zVal);
 
-    float getDistanceSquared(const size_t atomIndex1, const size_t atomIndex2) const;
+    float getDistanceSquared(size_t atomIndex1, size_t atomIndex2) const;
 
-    float getAtomEnergy(const size_t atomIndex) const;
-    float getAtomEnergy(const size_t atomIndex, const std::vector<size_t>& atomsToConsider) const;
+    float getAtomEnergy(size_t atomIndex) const;
+    float getAtomEnergy(size_t atomIndex, const std::vector<size_t>& atomsToConsider) const;
 
     float getClusterEnergy() const;
     
