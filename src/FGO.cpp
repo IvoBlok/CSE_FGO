@@ -30,11 +30,11 @@ SingleRunResult FuzzyGlobalOptimizer::runSingle(std::mt19937& rng) {
 
     auto startTotal = std::chrono::high_resolution_clock::now();
 
-    auto& startCluster = state.candidates.emplace_back(Cluster(), std::numeric_limits<float>::infinity());
+    auto& startCandidate = state.candidates.emplace_back(Cluster(), std::numeric_limits<float>::infinity());
 
-    initializeCluster(startCluster.first, rng);
-    localDiscreteOptimization(startCluster.first);
-    startCluster.second = startCluster.first.getClusterEnergy();
+    initializeCluster(startCandidate.first, rng);
+    localDiscreteOptimization(startCandidate.first);
+    startCandidate.second = startCandidate.first.getClusterEnergy();
 
     auto startDMC = std::chrono::high_resolution_clock::now();
     runDMCLayer(state, params.dmcLayer1, rng);
@@ -43,7 +43,6 @@ SingleRunResult FuzzyGlobalOptimizer::runSingle(std::mt19937& rng) {
     // TODO DMC2
 
     auto startRealOpt = std::chrono::high_resolution_clock::now();
-
     state.bestIndex = 0; // reset bestIndex, to fix in issue in the rare scenario that the real optimization leads to a worse energy
     for (size_t i = 0; i < state.candidates.size(); i++)
     {
@@ -113,15 +112,6 @@ void FuzzyGlobalOptimizer::initializeCluster(Cluster& cluster, std::mt19937& rng
         setPointInSphere(cluster, i, rng, spawningRadius, 0.f, 0.f, 0.f);
 }
 
-void FuzzyGlobalOptimizer::localDiscreteOptimization(Cluster& cluster) {
-    std::list<size_t> activeList;
-    for (size_t i = 0; i < cluster.size(); i++)
-        activeList.emplace_back(i);
-
-    while (!activeList.empty())
-        activeList.remove_if([&cluster, this](int i){ return localDiscreteFrozenOptimization(cluster, i) == 0; });
-}
-
 void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMCParameters& dmcParams, std::mt19937& rng) {
     size_t stepsSinceImprovement = 0;
 
@@ -169,6 +159,16 @@ void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMC
     }
 }
 
+void FuzzyGlobalOptimizer::localDiscreteOptimization(Cluster& cluster) {
+    std::list<size_t> activeList;
+    for (size_t i = 0; i < cluster.size(); i++)
+        activeList.emplace_back(i);
+
+    while (!activeList.empty())
+        activeList.remove_if([&cluster, this](int i){ return localDiscreteFrozenOptimization(cluster, i) == 0; });
+}
+
+
 void FuzzyGlobalOptimizer::localRealOptimization(std::pair<Cluster, float>& candidate) {
     Cluster& cluster = candidate.first;
     const size_t n = params.numberOfAtoms;
@@ -178,7 +178,9 @@ void FuzzyGlobalOptimizer::localRealOptimization(std::pair<Cluster, float>& cand
     std::vector<float> gradY(n);
     std::vector<float> gradZ(n);
 
-    float currEnergy = candidate.second;
+    static thread_local Cluster gradCluster1, gradCluster2;
+    if (gradCluster1.n != n) gradCluster1 = Cluster(n);
+    if (gradCluster2.n != n) gradCluster2 = Cluster(n);
 
     for (size_t iter = 0; iter < params.maxRealOptimizationIterations; iter++)
     {
@@ -199,8 +201,9 @@ void FuzzyGlobalOptimizer::localRealOptimization(std::pair<Cluster, float>& cand
                 const float dy = yi - cluster.y[j];
                 const float dz = zi - cluster.z[j];
 
-                const float r = dx*dx + dy*dy + dz*dz;
-                const float inv_r = 1.0 / (std::sqrt(r));
+                const float r2 = dx*dx + dy*dy + dz*dz;
+                const float r = std::sqrt(r2);
+                const float inv_r = 1.0 / r;
                 const float force = lennardJonesDerivative(r) * inv_r;
 
                 gradX[i] += dx * force;
@@ -212,49 +215,51 @@ void FuzzyGlobalOptimizer::localRealOptimization(std::pair<Cluster, float>& cand
                 gradZ[j] -= dz * force;
             }
         }
-        
-        // calculate gradient norm
-        float gradNorm = 0.0f;
-        for (size_t i = 0; i < n; i++)
-            gradNorm += gradX[i]*gradX[i] + gradY[i]*gradY[i] + gradZ[i]*gradZ[i];
-        
-        gradNorm = std::sqrt(gradNorm);
-
-        // initial step, with damping
-        float alpha = 0.1f / (gradNorm + 1.0f);
-
-        // backtracking line search
-        for (int ls = 0; ls < 8; ls++) {
-            for (size_t i = 0; i < n; i++)
-            {
-                cluster.x[i] -= alpha * gradX[i];
-                cluster.y[i] -= alpha * gradY[i];
-                cluster.z[i] -= alpha * gradZ[i];
+        // gradient clipping
+        for (size_t i = 0; i < n; ++i) {
+            const float g2 = gradX[i]*gradX[i] + gradY[i]*gradY[i] + gradZ[i]*gradZ[i];
+            if (g2 > 10000.0f) {  // 100^2
+                const float scale = 100.0f / std::sqrt(g2);
+                gradX[i] *= scale;
+                gradY[i] *= scale;
+                gradZ[i] *= scale;
             }
+        }
+
+        // line search
+        for (size_t i = 0; i < n; ++i) {
+            gradCluster1.x[i] = cluster.x[i] - gradX[i] * step;
+            gradCluster1.y[i] = cluster.y[i] - gradY[i] * step;
+            gradCluster1.z[i] = cluster.z[i] - gradZ[i] * step;
             
-            // Use armijo condition with gradient as the search direction to check for sufficient decrease
-            float newEnergy = cluster.getClusterEnergy();
-            if (newEnergy < currEnergy - 0.001f * alpha * gradNorm * gradNorm) {
-                currEnergy = newEnergy;
-                break;
-            }
+            gradCluster2.x[i] = cluster.x[i] - gradX[i] * (2.0f * step);
+            gradCluster2.y[i] = cluster.y[i] - gradY[i] * (2.0f * step);
+            gradCluster2.z[i] = cluster.z[i] - gradZ[i] * (2.0f * step);
+        }
 
-            // if the step was rejected, revert the step and reduce alpha (TODO instead change the cluster data to the new ones, instead of resetting then writing)
-            for (size_t i = 0; i < n; i++) {
-                cluster.x[i] += alpha * gradX[i];
-                cluster.y[i] += alpha * gradY[i];
-                cluster.z[i] += alpha * gradZ[i];
-            }
-            alpha *= 0.5f;
+        const float E0 = candidate.second;
+        const float E1 = gradCluster1.getClusterEnergy();
+        const float E2 = gradCluster2.getClusterEnergy();
+        
+        // interpolate quadratic equation
+        const float denom = 2.0f * E2 - 4.0f * E1 + 2.0f * E0;
+        if (std::abs(denom) < 1e-7f) break;
+
+        const float alpha = (-3.0f * E0 + 4.0f * E1 - E2) / denom;
+        
+        // move to minimum of fitted quadratic
+        for (size_t i = 0; i < n; ++i) {
+            cluster.x[i] += gradX[i] * (step * alpha);
+            cluster.y[i] += gradY[i] * (step * alpha);
+            cluster.z[i] += gradZ[i] * (step * alpha);
         }
 
         // convergence condition
-        if (gradNorm < 1e-4f || std::abs(candidate.second - currEnergy) < 1e-8f)
-            break;
-
-        candidate.second = currEnergy;
+        candidate.second = cluster.getClusterEnergy();
+        if (std::abs(candidate.second - E0) < 1e-6f) break;
     }
 }
+
 
 // helper functions
 void FuzzyGlobalOptimizer::setPointInSphere(Cluster& cluster, size_t index, std::mt19937& rng, float radius, float cx, float cy, float cz, bool allowZero) {
@@ -280,44 +285,41 @@ void FuzzyGlobalOptimizer::setPointInSphere(Cluster& cluster, size_t index, std:
 }
 
 size_t FuzzyGlobalOptimizer::localDiscreteFrozenOptimization(Cluster& cluster, const size_t freeIndex) {
+    float oldAtomEnergy = cluster.getAtomEnergy(freeIndex);
+    int stepsSinceChange, numChanges, axis;
+    stepsSinceChange = numChanges = axis = 0;
+
     float& x = cluster.x[freeIndex];
     float& y = cluster.y[freeIndex];
     float& z = cluster.z[freeIndex];
 
-    float currentEnergy = cluster.getAtomEnergy(freeIndex);
-    size_t numChanges = 0;
-    bool improved = true;
+    while (stepsSinceChange < 3) {
+        axis = (++axis) % 3;
 
-    const float moves[6][3] = {
-        {params.gridSpacing, 0, 0},
-        {-params.gridSpacing, 0, 0},
-        {0, params.gridSpacing, 0},
-        {0, -params.gridSpacing, 0},
-        {0, 0, params.gridSpacing},
-        {0, 0, -params.gridSpacing}
-    };
+        float& coord = (axis == 0) ? cluster.x[freeIndex] : (axis == 1) ? cluster.y[freeIndex] : cluster.z[freeIndex];
+        coord += params.gridSpacing;
 
-    while (improved) {
-        improved = false;
+        float newAtomEnergy = cluster.getAtomEnergy(freeIndex);
 
-        for (int moveIdx = 0; moveIdx < 6; ++moveIdx) {
-            x += moves[moveIdx][0];
-            y += moves[moveIdx][1];
-            z += moves[moveIdx][2];
-
-            float newEnergy = cluster.getAtomEnergy(freeIndex);
-
-            if (newEnergy - currentEnergy < 0.0f) {
-                currentEnergy = newEnergy;
-                improved = true;
-                numChanges++;
-                break;
-            } else {
-                x -= moves[moveIdx][0];
-                y -= moves[moveIdx][1];
-                z -= moves[moveIdx][2];
-            }
+        if (newAtomEnergy - oldAtomEnergy < 0.0f) {
+            oldAtomEnergy = newAtomEnergy;
+            stepsSinceChange = 0;
+            numChanges++;
+            continue;
         }
+
+        coord -= 2 * params.gridSpacing;
+        newAtomEnergy = cluster.getAtomEnergy(freeIndex);
+
+        if (newAtomEnergy - oldAtomEnergy < 0.0f) {
+            oldAtomEnergy = newAtomEnergy;
+            stepsSinceChange = 0;
+            numChanges++;
+            continue;
+        }
+
+        coord += 1 * params.gridSpacing;
+        stepsSinceChange++;
     }
 
     return numChanges;

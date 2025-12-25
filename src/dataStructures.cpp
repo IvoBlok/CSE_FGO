@@ -30,17 +30,18 @@ float lennardJonesDerivative(float distance) {
 }
 
 
+
 // Cluster Implementation
 // ===================================================================================
 Cluster::Cluster(const size_t numberOfPoints) : x(numberOfPoints), y(numberOfPoints), z(numberOfPoints), n(numberOfPoints) {}
 
-void Cluster::setPoint(size_t atomIndex, float xVal, float yVal, float zVal) {
+void Cluster::setPoint(const size_t atomIndex, const float xVal, const float yVal, const float zVal) {
     x[atomIndex] = xVal;
     y[atomIndex] = yVal;
     z[atomIndex] = zVal;
 }
 
-float Cluster::getDistanceSquared(size_t atomIndex1, size_t atomIndex2) const {
+float Cluster::getDistanceSquared(const size_t atomIndex1, const size_t atomIndex2) const {
     const float dx = x[atomIndex1] - x[atomIndex2];
     const float dy = y[atomIndex1] - y[atomIndex2];
     const float dz = z[atomIndex1] - z[atomIndex2];

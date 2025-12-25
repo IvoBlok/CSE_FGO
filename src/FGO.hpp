@@ -91,13 +91,8 @@ public:
 
 private: 
     void initializeCluster(Cluster& cluster, std::mt19937& rng);
-
+    void runDMCLayer(RunState& state, const FGOParameters::DMCParameters& dmcParams, std::mt19937& rng);
     void localDiscreteOptimization(Cluster& cluster);
-
-    void runDMCLayer(RunState& state, 
-                    const FGOParameters::DMCParameters& dmcParams,
-                    std::mt19937& rng);
-    
     void localRealOptimization(std::pair<Cluster, float>& candidate);
 
     // helper functions for the main algorithm steps above

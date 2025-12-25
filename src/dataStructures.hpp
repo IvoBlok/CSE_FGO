@@ -8,6 +8,7 @@ float lennardJonesPotential(float distance);
 float lennardJonesSquaredPotential(float squaredDistance);
 float lennardJonesDerivative(float distance);
 
+
 struct Cluster {
     std::vector<float> x, y, z;
     size_t n = 0;
@@ -18,7 +19,7 @@ struct Cluster {
     Cluster(const Cluster& other) = default;
     Cluster& operator=(const Cluster& other) = default;
 
-    void setPoint(size_t atomIndex, float xVal, float yVal, float zVal);
+    void setPoint(const size_t atomIndex, const float xVal, const float yVal, const float zVal);
 
     float getDistanceSquared(size_t atomIndex1, size_t atomIndex2) const;
 
