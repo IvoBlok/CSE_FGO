@@ -15,7 +15,6 @@ I now use perf and hotspot. So for example gather data with 'perf record --call-
 
 TODO
 =========
- - Implement localRealOptimization
  - Gather stats in the range of n=2...50 and create code to plot this (as with the python code in the rust example) including computational speed (for each algorithm step)
  - parallelization
  - instead of an LJLookup, which as seen before likely has terrible cache performance, maybe just compute it for various points, then interpolate with a simpler function. this can probably be further improved by using SIMD instructions in this operation, since for each AtomEnergy we're doing many independent LJ potential evaluations.

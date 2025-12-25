@@ -11,6 +11,7 @@
 #include <vector>
 #include <string>
 #include <vector>
+#include <chrono>
 
 # define M_PI           3.14159265358979323846
 
@@ -47,6 +48,9 @@ struct SingleRunResult {
     std::vector<std::pair<ContinuousCluster, float>> continuousCandidates;
 
     // optionally more, to be used for debugging / performance analysis
+    std::chrono::microseconds totalTime{0};
+    std::chrono::microseconds dmcTime{0};
+    std::chrono::microseconds realOptTime{0};
 };
 
 struct MultiRunResult {
@@ -56,6 +60,8 @@ struct MultiRunResult {
     std::vector<SingleRunResult> allRuns;
 
     // optionally more, for debug / performance analysis or just statistics across the runs
+    std::chrono::microseconds totalTime{0};
+    std::chrono::microseconds averageTime{0};
 };
 
 

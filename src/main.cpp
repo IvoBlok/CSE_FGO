@@ -172,4 +172,5 @@ int main(int argc, char **argv) {
             correctFinds++;
     
     std::cout << "Success rate: " << correctFinds << " / " << result.allRuns.size() << "\n";
+    std::cout << "Avg time: " << result.averageTime.count() / 1e6 << " seconds\n";
 }

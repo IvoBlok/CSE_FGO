@@ -27,16 +27,22 @@ SingleRunResult FuzzyGlobalOptimizer::runSingleWithSeed(uint32_t seed) {
 
 SingleRunResult FuzzyGlobalOptimizer::runSingle(std::mt19937& rng) {
     RunState state;
+
+    auto startTotal = std::chrono::high_resolution_clock::now();
+
     auto& candidate = state.discreteCandidates.emplace_back(DiscreteCluster(), std::numeric_limits<float>::infinity());
 
     initializeCluster(candidate.first, rng);
     localDiscreteOptimization(candidate.first);
     candidate.second = candidate.first.getClusterEnergy();
 
+    auto startDMC = std::chrono::high_resolution_clock::now();
     runDMCLayer(state, params.dmcLayer1, rng);
+    auto endDMC = std::chrono::high_resolution_clock::now();
 
     // TODO DMC2
 
+    auto startRealOpt = std::chrono::high_resolution_clock::now();
     for (const auto& candidate : state.discreteCandidates)
     {
         if (candidate.second < state.discreteCandidates[state.bestDiscrete].second + 2.0f) {
@@ -47,10 +53,13 @@ SingleRunResult FuzzyGlobalOptimizer::runSingle(std::mt19937& rng) {
                 state.bestContinuous = state.continuousCandidates.size() - 1;
         }
     }
+    auto endRealOpt = std::chrono::high_resolution_clock::now();
 
     // TODO SMC
 
     // TODO local real optimization of best continuous clusters
+
+    auto endTotal = std::chrono::high_resolution_clock::now();
 
     SingleRunResult result;
     result.bestCluster = state.continuousCandidates[state.bestContinuous].first;
@@ -58,6 +67,10 @@ SingleRunResult FuzzyGlobalOptimizer::runSingle(std::mt19937& rng) {
     result.discreteCandidates = std::move(state.discreteCandidates);
     result.continuousCandidates = std::move(state.continuousCandidates);
     
+    result.totalTime = std::chrono::duration_cast<std::chrono::microseconds>(endTotal - startTotal);
+    result.dmcTime = std::chrono::duration_cast<std::chrono::microseconds>(endDMC - startDMC);
+    result.realOptTime = std::chrono::duration_cast<std::chrono::microseconds>(endRealOpt - startRealOpt);
+
     return result;
 }
 
@@ -65,17 +78,23 @@ MultiRunResult FuzzyGlobalOptimizer::runMultiple(size_t numRuns) {
     MultiRunResult multiResult;
     multiResult.allRuns.reserve(numRuns);
 
+
     for (size_t i = 0; i < numRuns; i++)
     {
         std::mt19937 runRng(std::random_device{}());
         auto singleResult = runSingle(runRng);
         multiResult.allRuns.emplace_back(std::move(singleResult));
 
+        multiResult.totalTime += singleResult.totalTime;
+
         if (singleResult.bestEnergy < multiResult.globalBestEnergy) {
             multiResult.globalBestEnergy = singleResult.bestEnergy;
             multiResult.globalBestCluster = singleResult.bestCluster;
         }
     }
+
+    if (numRuns > 0)
+        multiResult.averageTime = multiResult.totalTime / numRuns;
     
     return multiResult;
 }
