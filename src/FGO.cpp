@@ -27,20 +27,34 @@ SingleRunResult FuzzyGlobalOptimizer::runSingleWithSeed(uint32_t seed) {
 
 SingleRunResult FuzzyGlobalOptimizer::runSingle(std::mt19937& rng) {
     RunState state;
-    DiscreteCluster& cluster = state.discreteCandidates.emplace_back(DiscreteCluster());
-    state.bestDiscreteIndex = 0;
+    auto& candidate = state.discreteCandidates.emplace_back(DiscreteCluster(), std::numeric_limits<float>::infinity());
 
-    initializeCluster(cluster, rng);
-    localDiscreteOptimization(cluster);
-    state.bestEnergy = cluster.getClusterEnergy();
+    initializeCluster(candidate.first, rng);
+    localDiscreteOptimization(candidate.first);
+    candidate.second = candidate.first.getClusterEnergy();
 
     runDMCLayer(state, params.dmcLayer1, rng);
 
-    // TODO DMC2, SMC
+    // TODO DMC2
+
+    for (const auto& candidate : state.discreteCandidates)
+    {
+        if (candidate.second < state.discreteCandidates[state.bestDiscrete].second + 2.0f) {
+            state.continuousCandidates.emplace_back(ContinuousCluster(candidate.first, params.discreteGridSteps), candidate.second);
+            localRealOptimization(state.continuousCandidates.back());
+
+            if (state.continuousCandidates.back().second < state.continuousCandidates[state.bestContinuous].second)
+                state.bestContinuous = state.continuousCandidates.size() - 1;
+        }
+    }
+
+    // TODO SMC
+
+    // TODO local real optimization of best continuous clusters
 
     SingleRunResult result;
-    result.bestCluster = ContinuousCluster(state.discreteCandidates[state.bestDiscreteIndex], params.discreteGridSteps);
-    result.bestEnergy = state.bestEnergy;
+    result.bestCluster = state.continuousCandidates[state.bestContinuous].first;
+    result.bestEnergy = state.continuousCandidates[state.bestContinuous].second;
     result.discreteCandidates = std::move(state.discreteCandidates);
     result.continuousCandidates = std::move(state.continuousCandidates);
     
@@ -98,11 +112,11 @@ void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMC
     std::vector<float> targetWeights(params.numberOfAtoms);
 
     while (stepsSinceImprovement < (size_t)(params.numberOfAtoms * params.numberOfAtoms * dmcParams.convergenceFactor)) {
-        const DiscreteCluster& currentCluster = state.discreteCandidates.back();
+        const auto& currCandidate = state.discreteCandidates.back();
 
         for (size_t i = 0; i < params.numberOfAtoms; i++)
         {
-            atomEnergies[i] = currentCluster.getAtomEnergy(i);
+            atomEnergies[i] = currCandidate.first.getAtomEnergy(i);
 
             activeWeights[i] = std::exp(atomEnergies[i] / dmcParams.activeEnergy);
             targetWeights[i] = std::exp(-0.5 * std::pow(atomEnergies[i] - dmcParams.targetEnergy, 2) / std::pow(dmcParams.targetSigma, 2));
@@ -113,7 +127,7 @@ void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMC
         atomSelector.updateDistribution(targetWeights);
         size_t targetAtom = atomSelector.generate(rng);
 
-        currentCluster.copyTo(candidate);
+        currCandidate.first.copyTo(candidate);
         candidate.getPoint(activeAtom) = getPointInSphere(rng, 1.0f, candidate.getPoint(targetAtom), false);
 
         localDiscreteFrozenOptimization(candidate, activeAtom);
@@ -126,13 +140,69 @@ void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMC
             localDiscreteOptimization(candidate);
 
             float candidateEnergy = candidate.getClusterEnergy();
-            if(candidateEnergy < state.bestEnergy) {
-                state.bestEnergy = candidateEnergy;
-                state.bestDiscreteIndex = state.discreteCandidates.size();
-                state.discreteCandidates.emplace_back(candidate);
+            if(candidateEnergy < state.discreteCandidates[state.bestDiscrete].second) {
+                state.bestDiscrete = state.discreteCandidates.size();
+                state.discreteCandidates.emplace_back(candidate, candidateEnergy);
                 stepsSinceImprovement = 0;
             }
         }
+    }
+}
+
+void FuzzyGlobalOptimizer::localRealOptimization(std::pair<ContinuousCluster, float>& candidate) {
+    std::vector<ContinuousPoint> gradient(params.numberOfAtoms);
+
+    float distance, distanceSquared;
+    ContinuousPoint direction;
+
+    ContinuousCluster gradientCluster1 = ContinuousCluster(params.numberOfAtoms);
+    ContinuousCluster gradientCluster2 = ContinuousCluster(params.numberOfAtoms);
+
+    float newEnergy1, newEnergy2;
+    float lastOriginalEnergy = std::numeric_limits<float>::infinity();
+
+    for (size_t iter = 0; iter < params.maxRealOptimizationIterations; iter++)
+    {
+        for (size_t i = 0; i < params.numberOfAtoms; i++)
+        {
+            gradient[i] = ContinuousPoint(0.0f);
+
+            for (size_t j = 0; j < params.numberOfAtoms; j++)
+            {
+                if (j != i) {
+                    distanceSquared = candidate.first.getDistanceSquared(i, j);
+                    distance = std::sqrt(distanceSquared);
+
+                    direction = candidate.first.getPoint(i) - candidate.first.getPoint(j);
+                    direction = (direction / distance) * lennardJonesDerivative(distance);
+                    gradient[i] = gradient[i] + direction;
+                }
+            }
+            // limit the length of each gradient element to a max of 100 (TODO fix this, such that it uses the full gradient length instead of element-wise)
+            gradient[i] = (gradient[i] / std::sqrt(gradient[i].lengthSquared())) * std::fmin(100.f, std::sqrt(gradient[i].lengthSquared()));
+            
+        }
+        
+        for (size_t i = 0; i < params.numberOfAtoms; i++)
+        {
+            gradientCluster1.getPoint(i) = candidate.first.getPoint(i) - gradient[i] * params.gradientStepSize;
+            gradientCluster2.getPoint(i) = candidate.first.getPoint(i) - gradient[i] * (2.0f * params.gradientStepSize);
+        }
+
+        newEnergy1 = gradientCluster1.getClusterEnergy();
+        newEnergy2 = gradientCluster2.getClusterEnergy();
+        
+        if (std::abs(2*newEnergy2 - 4*newEnergy1 + 2*candidate.second) < 1e-7f)
+            break;
+
+        float optimalDeflectionFactor = (4*newEnergy1 - newEnergy2 - 3*candidate.second) / (-4*newEnergy1 + 2*newEnergy2 + 2*candidate.second);
+        candidate.first.addToPoints(gradient, params.gradientStepSize * optimalDeflectionFactor);
+
+        float oldEnergy = candidate.second;
+        candidate.second = candidate.first.getClusterEnergy();
+
+        if (std::abs(candidate.second - oldEnergy) < 1e-6f)
+            break;
     }
 }
 

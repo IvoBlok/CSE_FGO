@@ -168,7 +168,7 @@ int main(int argc, char **argv) {
     
     int correctFinds = 0;
     for (const auto& run : result.allRuns)
-        if (run.bestCluster.getClusterEnergy() * 1.01 < clusterBestEnergies[params.numberOfAtoms])
+        if (run.bestCluster.getClusterEnergy() * 1.001 < clusterBestEnergies[params.numberOfAtoms])
             correctFinds++;
     
     std::cout << "Success rate: " << correctFinds << " / " << result.allRuns.size() << "\n";

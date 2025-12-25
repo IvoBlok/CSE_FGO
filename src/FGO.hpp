@@ -43,8 +43,8 @@ struct SingleRunResult {
     ContinuousCluster bestCluster;
     float bestEnergy = std::numeric_limits<float>::max();
 
-    std::vector<DiscreteCluster> discreteCandidates;
-    std::vector<ContinuousCluster> continuousCandidates;
+    std::vector<std::pair<DiscreteCluster, float>> discreteCandidates;
+    std::vector<std::pair<ContinuousCluster, float>> continuousCandidates;
 
     // optionally more, to be used for debugging / performance analysis
 };
@@ -70,11 +70,11 @@ private:
     std::uniform_real_distribution<float> phiDist{0.0f, M_PI};
 
     struct RunState {
-        std::vector<DiscreteCluster> discreteCandidates;
-        std::vector<ContinuousCluster> continuousCandidates;
+        std::vector<std::pair<DiscreteCluster, float>> discreteCandidates;
+        std::vector<std::pair<ContinuousCluster, float>> continuousCandidates;
 
-        float bestEnergy = std::numeric_limits<float>::max();
-        size_t bestDiscreteIndex = static_cast<size_t>(-1);
+        size_t bestDiscrete = 0;
+        size_t bestContinuous = 0;
     };
 
 public:
@@ -96,7 +96,7 @@ private:
                     const FGOParameters::DMCParameters& dmcParams,
                     std::mt19937& rng);
     
-    void localRealOptimization(ContinuousCluster& cluster);
+    void localRealOptimization(std::pair<ContinuousCluster, float>& candidate);
 
     // helper functions for the main algorithm steps above
     DiscretePoint getPointInSphere(std::mt19937& rng, const float radius, const DiscretePoint& center, const bool allowZero = true);

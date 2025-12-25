@@ -67,6 +67,7 @@ struct ContinuousPoint {
     ContinuousPoint operator+(const ContinuousPoint& other) const;
     ContinuousPoint operator-(const ContinuousPoint& other) const;
     ContinuousPoint operator*(float scalar) const;
+    ContinuousPoint operator/(float scalar) const;
 
     float& operator[](const size_t index);
     const float& operator[](const size_t index) const;

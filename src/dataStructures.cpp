@@ -172,6 +172,11 @@ ContinuousPoint ContinuousPoint::operator*(float scalar) const {
     return ContinuousPoint(x * scalar, y * scalar, z * scalar);
 }
 
+ContinuousPoint ContinuousPoint::operator/(float scalar) const {
+    return ContinuousPoint(x / scalar, y / scalar, z / scalar);
+}
+
+
 float& ContinuousPoint::operator[](const size_t index) {
     if (index >= 3) 
         throw std::out_of_range("Index out of range. Valid indices are 0, 1, and 2\n");
