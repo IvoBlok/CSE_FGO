@@ -74,7 +74,7 @@ float Point::lengthSquared() const {
 
 // Cluster Implementation
 // ===================================================================================
-Cluster::Cluster(const size_t numberOfPoints) : points(numberOfPoints) {}
+Cluster::Cluster(const size_t numberOfPoints) : points(numberOfPoints), n(numberOfPoints) {}
 
 void Cluster::setPoint(const size_t atomIndex, const float x, const float y, const float z) {
     points[atomIndex] = {x, y, z};
@@ -93,10 +93,10 @@ const Point& Cluster::getPoint(const size_t atomIndex) const {
 }
 
 void Cluster::addToPoints(const std::vector<Point>& deltas, const float factor) {
-    if (points.size() != deltas.size()) 
+    if (n != deltas.size()) 
         throw std::invalid_argument("addToPoints: size mismatch");
 
-    for (size_t i = 0; i < points.size(); i++)
+    for (size_t i = 0; i < n; i++)
         points[i] = points[i] + deltas[i] * factor;
 }
 
@@ -112,7 +112,7 @@ float Cluster::getDistanceSquared(const size_t atomIndex1, const size_t atomInde
 float Cluster::getAtomEnergy(const size_t atomIndex) const {
     float total = 0.f;
 
-    for (size_t j = 0; j < points.size(); j++)
+    for (size_t j = 0; j < n; j++)
     {   
         if (atomIndex != j) {
             const float squaredDistance = getDistanceSquared(atomIndex, j);
@@ -138,7 +138,7 @@ float Cluster::getAtomEnergy(const size_t atomIndex, const std::vector<size_t>& 
 float Cluster::getClusterEnergy() const {
     float total = 0.f;
 
-    for (size_t i = 0; i < points.size(); i++)
+    for (size_t i = 0; i < n; i++)
         total += getAtomEnergy(i);
 
     return total * 0.5f;    
@@ -147,5 +147,3 @@ float Cluster::getClusterEnergy() const {
 void Cluster::copyTo(Cluster& otherCluster) const {
     otherCluster.points = points;
 }
-
-size_t Cluster::size() const { return points.size(); }

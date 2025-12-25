@@ -181,7 +181,7 @@ void to_json(json& j, const SingleRunResult& result) {
 
 void to_json(json& j, const MultiRunResult& result) {
     j = json{
-        {"n", result.globalBestCluster.points.size()},
+        {"n", result.globalBestCluster.n},
         {"globalBestCluster", result.globalBestCluster},
         {"globalBestEnergy", result.globalBestEnergy},
         {"allRuns", result.allRuns},

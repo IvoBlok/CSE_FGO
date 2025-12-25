@@ -30,6 +30,7 @@ struct Point {
 
 struct Cluster {
     std::vector<Point> points;
+    size_t n = 0;
     
     Cluster() = default;
     explicit Cluster(const size_t numberOfPoints);
@@ -54,7 +55,7 @@ struct Cluster {
     
     void copyTo(Cluster& otherCluster) const;
 
-    size_t size() const;
+    size_t size() const { return n; };
 };
 
 #endif // DATA_STRUCTURES_H
