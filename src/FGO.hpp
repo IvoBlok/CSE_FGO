@@ -18,7 +18,7 @@
 struct FGOParameters {
     size_t numberOfAtoms;
 
-    float discreteGridSteps = 0.02f;
+    float gridSpacing = 0.02f;
     float discreteCutoffDistance = 2.1f;
 
     float gradientStepSize = 0.001f;
@@ -41,11 +41,10 @@ struct FGOParameters {
 };
 
 struct SingleRunResult {
-    ContinuousCluster bestCluster;
+    Cluster bestCluster;
     float bestEnergy = std::numeric_limits<float>::max();
 
-    std::vector<std::pair<DiscreteCluster, float>> discreteCandidates;
-    std::vector<std::pair<ContinuousCluster, float>> continuousCandidates;
+    std::vector<std::pair<Cluster, float>> candidates;
 
     // optionally more, to be used for debugging / performance analysis
     std::chrono::microseconds totalTime{0};
@@ -54,7 +53,7 @@ struct SingleRunResult {
 };
 
 struct MultiRunResult {
-    ContinuousCluster globalBestCluster;
+    Cluster globalBestCluster;
     float globalBestEnergy = std::numeric_limits<float>::max();
 
     std::vector<SingleRunResult> allRuns;
@@ -76,11 +75,8 @@ private:
     std::uniform_real_distribution<float> phiDist{0.0f, M_PI};
 
     struct RunState {
-        std::vector<std::pair<DiscreteCluster, float>> discreteCandidates;
-        std::vector<std::pair<ContinuousCluster, float>> continuousCandidates;
-
-        size_t bestDiscrete = 0;
-        size_t bestContinuous = 0;
+        std::vector<std::pair<Cluster, float>> candidates;
+        size_t bestIndex = 0;
     };
 
 public:
@@ -94,20 +90,20 @@ public:
     MultiRunResult runMultiple(size_t numRuns = 0);
 
 private: 
-    void initializeCluster(DiscreteCluster& cluster, std::mt19937& rng);
+    void initializeCluster(Cluster& cluster, std::mt19937& rng);
 
-    void localDiscreteOptimization(DiscreteCluster& cluster);
+    void localDiscreteOptimization(Cluster& cluster);
 
     void runDMCLayer(RunState& state, 
                     const FGOParameters::DMCParameters& dmcParams,
                     std::mt19937& rng);
     
-    void localRealOptimization(std::pair<ContinuousCluster, float>& candidate);
+    void localRealOptimization(std::pair<Cluster, float>& candidate);
 
     // helper functions for the main algorithm steps above
-    DiscretePoint getPointInSphere(std::mt19937& rng, const float radius, const DiscretePoint& center, const bool allowZero = true);
+    Point getPointInSphere(std::mt19937& rng, const float radius, const Point& center, const bool allowZero = true);
 
-    size_t localDiscreteFrozenOptimization(DiscreteCluster& cluster, const size_t frozenIndex);
+    size_t localDiscreteFrozenOptimization(Cluster& cluster, const size_t frozenIndex);
 };
 
 #endif // FUZZY_GLOBAL_OPTIMIZER_H

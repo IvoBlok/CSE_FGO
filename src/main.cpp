@@ -160,19 +160,11 @@ const float clusterBestEnergies[151] = {
 
 using json = nlohmann::json;
 
-void to_json(json& j, const DiscretePoint& p) {
+void to_json(json& j, const Point& p) {
     j = json{{"x", p.x}, {"y", p.y}, {"z", p.z}};
 }
 
-void to_json(json& j, const ContinuousPoint& p) {
-    j = json{{"x", p.x}, {"y", p.y}, {"z", p.z}};
-}
-
-void to_json(json& j, const DiscreteCluster& cluster) {
-    j = json{{"points", cluster.points}, {"stepsize", std::sqrt(cluster.gridStepSizeSquared)}};
-}
-
-void to_json(json& j, const ContinuousCluster& cluster) {
+void to_json(json& j, const Cluster& cluster) {
     j = json{{"points", cluster.points}};
 }
 
@@ -180,8 +172,7 @@ void to_json(json& j, const SingleRunResult& result) {
     j = json{
         {"bestCluster", result.bestCluster},
         {"bestEnergy", result.bestEnergy},
-        {"discreteCandidates", result.discreteCandidates},
-        {"continuousCandidates", result.continuousCandidates},
+        {"candidates", result.candidates},
         {"totalTime", result.totalTime.count()},
         {"dmcTime", result.dmcTime.count()},
         {"realOptTime", result.realOptTime.count()}
