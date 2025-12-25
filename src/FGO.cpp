@@ -10,294 +10,277 @@
 
 # define M_PI           3.14159265358979323846  /* pi */
 
-FuzzyGlobalOptimizer::FuzzyGlobalOptimizer(int numberOfAtoms, const std::vector<float>& LJLookup, float discreteGridSteps, float discreteCutoffDistance, float gradientStepSize) 
-    :   numberOfAtoms(numberOfAtoms), 
-        LJLookup(LJLookup),
-        discreteGridSteps(discreteGridSteps), 
-        discreteCutoffDistance(discreteCutoffDistance),
-        gradientStepSize(gradientStepSize),
-        bestClusterEnergy(0.f),
-        bestClusterIndex(-1)
-{ 
-    // calculate initial cluster spawning radius, i.e. in what sphere of volume the atoms are 'spawned'
-    spawningRadius = 0.4f * std::pow(numberOfAtoms, 0.333f);
-    
-    // sphere based random point generation initialization
-    gen = std::minstd_rand0(rd());
-    dist = std::uniform_real_distribution<>(0.0, 1.0);         // For uniform sampling
-    distTheta = std::uniform_real_distribution<>(0.0, 2.f * M_PI); // Azimuthal angle
-    distPhi = std::uniform_real_distribution<>(0.0, M_PI);     // Polar angle
+FuzzyGlobalOptimizer::FuzzyGlobalOptimizer(const FGOParameters& params)
+    : params(params), atomSelector(DiscreteDistribution(params.numberOfAtoms)), rng(std::random_device{}()) {}
 
-    discreteDistribution = DiscreteDistribution{numberOfAtoms};
+FuzzyGlobalOptimizer::FuzzyGlobalOptimizer(FGOParameters&& params)
+    : params(std::move(params)), atomSelector(DiscreteDistribution(params.numberOfAtoms)), rng(std::random_device{}()) {}
+
+SingleRunResult FuzzyGlobalOptimizer::runSingle() {
+    return runSingle(rng);
 }
 
-void FuzzyGlobalOptimizer::runFGO() {
-    // ===============================================
-    // STEP 1: create initial cluster
-    currentCluster = DiscreteCluster{discreteGridSteps*discreteGridSteps, numberOfAtoms};
-    generateInitialCluster(currentCluster, spawningRadius);
-    localDiscreteOptimization(currentCluster);
-    bestClusterEnergy = currentCluster.getClusterEnergy(LJLookup);
+SingleRunResult FuzzyGlobalOptimizer::runSingleWithSeed(uint32_t seed) {
+    std::mt19937 seededRng(seed);
+    return runSingle(seededRng);
+}
 
-    // ===============================================
-    // STEP 2: run two distinct DMC layers, with experimentally determined hyperparameters as inputs
-    discreteMonteCarlo(1.0f, -4.1f, 1.25f, 0.4f, 2.5f);
+SingleRunResult FuzzyGlobalOptimizer::runSingle(std::mt19937& rng) {
+    RunState state;
 
-    if(bestClusterIndex != -1)
-        candidateClusters[bestClusterIndex].copyInto(currentCluster);
+    auto startTotal = std::chrono::high_resolution_clock::now();
 
-    discreteMonteCarlo(1.0f, -11.0f, 1.3f, 0.3f, 1.5f);
+    auto& candidate = state.candidates.emplace_back(Cluster(), std::numeric_limits<float>::infinity());
 
-    // ===============================================
-    // STEP 3: locally optimize all candidate clusters in the real space
+    initializeCluster(candidate.first, rng);
+    localDiscreteOptimization(candidate.first);
+    candidate.second = candidate.first.getClusterEnergy();
 
-    // get all candidates with low energies
-    std::vector<ContinuousCluster> goodCandidates;
+    auto startDMC = std::chrono::high_resolution_clock::now();
+    runDMCLayer(state, params.dmcLayer1, rng);
+    auto endDMC = std::chrono::high_resolution_clock::now();
 
-    for (size_t i = 0; i < candidateClusters.size(); i++)
+    // TODO DMC2
+
+    auto startRealOpt = std::chrono::high_resolution_clock::now();
+
+    state.bestIndex = 0; // reset bestIndex, to fix in issue in the rare scenario that the real optimization leads to a worse energy
+    for (size_t i = 0; i < state.candidates.size(); i++)
     {
-        if (candidateClusters[i].getClusterEnergy(LJLookup) < bestClusterEnergy + 2.f) {
-            goodCandidates.emplace_back(ContinuousCluster{candidateClusters[i], discreteGridSteps});
+        auto& candidate = state.candidates[i];
 
-            // optimize the appropriate candidates now in real 3D space
-            localRealOptimization(goodCandidates.back());
+        if (candidate.second < state.candidates[state.bestIndex].second + 2.0f) {
+            localRealOptimization(candidate);
+
+            if (candidate.second < state.candidates[state.bestIndex].second)
+                state.bestIndex = i;
         }
     }
+    auto endRealOpt = std::chrono::high_resolution_clock::now();
 
-    // TEMP: For debugging / development purposes, we retrieve the best real-optimized candidate
-    for (size_t i = 0; i < goodCandidates.size(); i++)
-    {   
-        float energy = goodCandidates[i].getClusterEnergy(LeonardJonesSquaredPotential);
-        if (energy < bestClusterEnergy)
-            bestClusterEnergy = energy;
-    }
-
-    // ===============================================
-    // STEP 4, 5: Surface Monte Carlo (SMC). mainly important for larger clusters (>200)
     // TODO SMC
+
+    // TODO local real optimization of best continuous clusters
+
+    auto endTotal = std::chrono::high_resolution_clock::now();
+
+    SingleRunResult result;
+    result.bestCluster = state.candidates[state.bestIndex].first;
+    result.bestEnergy = state.candidates[state.bestIndex].second;
+    result.candidates = std::move(state.candidates);
+    
+    result.totalTime = std::chrono::duration_cast<std::chrono::microseconds>(endTotal - startTotal);
+    result.dmcTime = std::chrono::duration_cast<std::chrono::microseconds>(endDMC - startDMC);
+    result.realOptTime = std::chrono::duration_cast<std::chrono::microseconds>(endRealOpt - startRealOpt);
+
+    return result;
 }
 
-void FuzzyGlobalOptimizer::discreteMonteCarlo(float activeEnergy, float targetEnergy, float targetSigma, float acceptanceEnergy, float convergenceFactor) {
-    int lastSinceImprovement = 0;
+MultiRunResult FuzzyGlobalOptimizer::runMultiple(size_t numRuns) {
+    MultiRunResult multiResult;
+    multiResult.allRuns.reserve(numRuns);
 
-    DiscreteCluster candidateCluster{discreteGridSteps*discreteGridSteps, numberOfAtoms};
 
-    std::vector<float> atomEnergies(numberOfAtoms);
-    std::vector<float> atomActiveWeights(numberOfAtoms);
-    std::vector<float> atomTargetWeights(numberOfAtoms);
-
-    while (lastSinceImprovement < (int)(numberOfAtoms*numberOfAtoms*convergenceFactor))
+    for (size_t i = 0; i < numRuns; i++)
     {
-        for (int i = 0; i < numberOfAtoms; i++) {
-            atomEnergies[i] = currentCluster.getAtomEnergy(LJLookup, i);
+        std::mt19937 runRng(std::random_device{}());
+        auto singleResult = runSingle(runRng);
+        multiResult.allRuns.emplace_back(std::move(singleResult));
 
-            atomActiveWeights[i] = std::exp(atomEnergies[i]/activeEnergy);
-            atomTargetWeights[i] = std::exp(-std::pow(atomEnergies[i] - targetEnergy, 2)/(2*std::pow(targetSigma, 2)));
+        multiResult.totalTime += singleResult.totalTime;
+
+        if (singleResult.bestEnergy < multiResult.globalBestEnergy) {
+            multiResult.globalBestEnergy = singleResult.bestEnergy;
+            multiResult.globalBestCluster = singleResult.bestCluster;
         }
+    }
 
-        int activeAtom = getRandomAtomByWeights(atomActiveWeights);
-        int targetAtom = getRandomAtomByWeights(atomTargetWeights);
+    if (numRuns > 0)
+        multiResult.averageTime = multiResult.totalTime / numRuns;
+    
+    return multiResult;
+}
 
-        // make a new candidate cluster, with the active atomed moved to the area around the target atom, in a sphere of radius 1.
-        // Since the problem is tackled in reduced units, a distance of 1 ( or 2^(1/6)) is the optimum distance between two atoms (assuming no other atoms are in the cluster).
-        currentCluster.copyInto(candidateCluster);
-        setAtomInRandomSphere(candidateCluster, activeAtom, 1.f, currentCluster.getPoint(targetAtom), false);
 
-        // locally optimize the modified cluster in the discrete space, while holding the rest of the cluster still
-        localDiscreteFrozenOptimization(candidateCluster, activeAtom);
+// private functions
+// ===============================================
+void FuzzyGlobalOptimizer::initializeCluster(Cluster& cluster, std::mt19937& rng) {
+    cluster = Cluster(params.numberOfAtoms);
 
-        // if the local energy of the moved atom improved, we directly accept the new candidate
-        float deltaLocalAtomEnergy = candidateCluster.getAtomEnergy(LJLookup, activeAtom) - atomEnergies[activeAtom];
+    float spawningRadius = params.spawningRadiusFactor * std::pow(params.numberOfAtoms, 0.33f);
 
-        float randomExpAcceptanceThreshold = dist(gen);
-
-        if(deltaLocalAtomEnergy < 0.f || randomExpAcceptanceThreshold < std::exp(-deltaLocalAtomEnergy/acceptanceEnergy)) {
-            
-            localDiscreteOptimization(candidateCluster);
-            
-            // if the discrete local optimization (DLO) found a new best cluster, keep the candidate
-            float candidateEnergy = candidateCluster.getClusterEnergy(LJLookup);
-            if(candidateEnergy < bestClusterEnergy) {
-                bestClusterEnergy = candidateEnergy;
-                bestClusterIndex = candidateClusters.size();
-                candidateClusters.emplace_back(candidateCluster);
-                lastSinceImprovement = 0;
-            } else {
-                lastSinceImprovement++;
-            }
-
-            // now that we have a probably better cluster, make it the base cluster for the next iteration
-            candidateCluster.copyInto(currentCluster);
-        } else {
-            // the move - local optimization combo chosen here didn't work out. keep the original cluster
-            lastSinceImprovement++;
-        }
+    for (auto& point : cluster.points) {
+        point = getPointInSphere(rng, spawningRadius, Point(0.f));
     }
 }
 
-int FuzzyGlobalOptimizer::localDiscreteFrozenOptimization(DiscreteCluster& cluster, int nonFrozenAtom) {
-    // get all atoms within the cutoff range of the non-frozen atom
-    std::vector<int> neighbours = cluster.getAtomNeighbours(nonFrozenAtom, std::pow(discreteCutoffDistance / discreteGridSteps, 2));
-
-    return localDiscreteFrozenOptimization(cluster, nonFrozenAtom, neighbours);
-}
-
-int FuzzyGlobalOptimizer::localDiscreteFrozenOptimization(DiscreteCluster& cluster, int nonFrozenAtom, std::vector<int>& neighbours) {
-    float initialAtomEnergy = cluster.getAtomEnergy(LJLookup, nonFrozenAtom, neighbours);
-
-    // nudge the x,y,z direction individually, untill changes in any result in worse energy
-    float oldAtomEnergy = initialAtomEnergy;
-    float newAtomEnergy = 0.f;
-    int lastMoved = 0;
-    int changes = 0;
-    int axis = 0;
-    DiscretePoint& nonFrozenPoint = cluster.getPoint(nonFrozenAtom);
-
-    while (lastMoved < 3) {
-        axis = (++axis) % 3;
-        nonFrozenPoint[axis] += 1;
-        newAtomEnergy = cluster.getAtomEnergy(LJLookup, nonFrozenAtom, neighbours);
-
-        // if the nudge lowered, i.e. improved, the energy of this atom, accept the new position
-        if(oldAtomEnergy - newAtomEnergy > 0.f) {
-            oldAtomEnergy = newAtomEnergy;
-            lastMoved = 0;
-            changes++;
-            continue;
-        }
-        
-        // if the energy worsened in the positive direction, try the negative direction
-        nonFrozenPoint[axis] -= 2;
-        newAtomEnergy = cluster.getAtomEnergy(LJLookup, nonFrozenAtom, neighbours);
-
-        if(oldAtomEnergy - newAtomEnergy > 0.f) {
-            oldAtomEnergy = newAtomEnergy;
-            lastMoved = 0;
-            changes++;
-            continue;
-        }
-        
-        // if both directions worsen the outcome, reject the move in this axis, and note down that this axis wasn't succesfully nudged
-        nonFrozenPoint[axis] += 1;
-        lastMoved++;
-    }
-
-    return changes;
-}
-
-void FuzzyGlobalOptimizer::localDiscreteOptimization(DiscreteCluster& cluster) {
-    // activeList is simply all atoms which will be optimized that iteration. At the start, all atoms are in the list
-    std::list<int> activeList;
-    for (int i = 0; i < cluster.numberOfPoints; i++)
+void FuzzyGlobalOptimizer::localDiscreteOptimization(Cluster& cluster) {
+    std::list<size_t> activeList;
+    for (size_t i = 0; i < cluster.size(); i++)
         activeList.emplace_back(i);
 
-    
-    while(activeList.size() > 0) {
-        activeList.remove_if([&cluster, this](int n){ return localDiscreteFrozenOptimization(cluster, n) == 0; });
+    while (!activeList.empty())
+        activeList.remove_if([&cluster, this](int i){ return localDiscreteFrozenOptimization(cluster, i) == 0; });
+}
+
+void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMCParameters& dmcParams, std::mt19937& rng) {
+    size_t stepsSinceImprovement = 0;
+
+    Cluster candidate{params.numberOfAtoms};
+
+    std::vector<float> atomEnergies(params.numberOfAtoms);
+    std::vector<float> activeWeights(params.numberOfAtoms);
+    std::vector<float> targetWeights(params.numberOfAtoms);
+
+    while (stepsSinceImprovement < (size_t)(params.numberOfAtoms * params.numberOfAtoms * dmcParams.convergenceFactor)) {
+        const auto& currCandidate = state.candidates.back();
+
+        for (size_t i = 0; i < params.numberOfAtoms; i++)
+        {
+            atomEnergies[i] = currCandidate.first.getAtomEnergy(i);
+
+            activeWeights[i] = std::exp(atomEnergies[i] / dmcParams.activeEnergy);
+            targetWeights[i] = std::exp(-0.5 * std::pow(atomEnergies[i] - dmcParams.targetEnergy, 2) / std::pow(dmcParams.targetSigma, 2));
+        }
+        
+        atomSelector.updateDistribution(activeWeights);
+        size_t activeAtom = atomSelector.generate(rng);
+        atomSelector.updateDistribution(targetWeights);
+        size_t targetAtom = atomSelector.generate(rng);
+
+        currCandidate.first.copyTo(candidate);
+        candidate.getPoint(activeAtom) = getPointInSphere(rng, 1.0f, candidate.getPoint(targetAtom), false);
+
+        localDiscreteFrozenOptimization(candidate, activeAtom);
+
+        float deltaAtomEnergy = candidate.getAtomEnergy(activeAtom) - atomEnergies[activeAtom];
+
+        stepsSinceImprovement++;
+        float acceptanceThreshold = uniformDist(rng);
+        if (deltaAtomEnergy < 0.0f || acceptanceThreshold < std::exp(-deltaAtomEnergy / dmcParams.acceptanceEnergy)) {
+            localDiscreteOptimization(candidate);
+
+            float candidateEnergy = candidate.getClusterEnergy();
+            if(candidateEnergy < state.candidates[state.bestIndex].second) {
+                state.bestIndex = state.candidates.size();
+                state.candidates.emplace_back(candidate, candidateEnergy);
+                stepsSinceImprovement = 0;
+            }
+        }
     }
 }
 
-void FuzzyGlobalOptimizer::localRealOptimization(ContinuousCluster& cluster) {
-    // gradient is initialized with 0 vector
-    std::vector<ContinuousPoint> gradient;
-    gradient.reserve(cluster.numberOfPoints);
-    for (int i = 0; i < cluster.numberOfPoints; i++)
-        gradient.emplace_back(ContinuousPoint(0.f, 0.f, 0.f));
+void FuzzyGlobalOptimizer::localRealOptimization(std::pair<Cluster, float>& candidate) {
+    std::vector<Point> gradient(params.numberOfAtoms);
 
-    float distanceSquared;
-    float distance;
-    ContinuousPoint direction;
+    float distance, distanceSquared;
+    Point direction;
 
-    ContinuousCluster gradientCluster1 = ContinuousCluster(cluster.numberOfPoints);
-    ContinuousCluster gradientCluster2 = ContinuousCluster(cluster.numberOfPoints);
+    Cluster gradientCluster1 = Cluster(params.numberOfAtoms);
+    Cluster gradientCluster2 = Cluster(params.numberOfAtoms);
 
-    float originalEnergy, newEnergy1, newEnergy2;
+    float newEnergy1, newEnergy2;
     float lastOriginalEnergy = std::numeric_limits<float>::infinity();
 
-    for (int iteration = 0; iteration < 1000; iteration++)
+    for (size_t iter = 0; iter < params.maxRealOptimizationIterations; iter++)
     {
-        // fill the gradient, by iterating over each atom pair
-        for (int i = 0; i < cluster.numberOfPoints; i++)
-        {   
-            gradient[i] = ContinuousPoint(0.f, 0.f, 0.f);
+        for (size_t i = 0; i < params.numberOfAtoms; i++)
+        {
+            gradient[i] = Point(0.0f);
 
-            for (int j = 0; j < cluster.numberOfPoints; j++)
+            for (size_t j = 0; j < params.numberOfAtoms; j++)
             {
-                if(j != i) {
-                    distanceSquared = cluster.getDistanceSquared(i, j);
+                if (j != i) {
+                    distanceSquared = candidate.first.getDistanceSquared(i, j);
                     distance = std::sqrt(distanceSquared);
 
-                    direction = cluster.getPoint(i) - cluster.getPoint(j);
-                    direction = (direction * (1.f / distance)) * LeonardJonesDerivative(distance);
+                    direction = candidate.first.getPoint(i) - candidate.first.getPoint(j);
+                    direction = (direction / distance) * lennardJonesDerivative(distance);
                     gradient[i] = gradient[i] + direction;
                 }
             }
-            // limit the gradient length to a max of 100
-            gradient[i] = gradient[i] * (1.f / std::sqrt(gradient[i].lengthSquared())) * std::fmin(100.f, std::sqrt(gradient[i].lengthSquared()));
+            // limit the length of each gradient element to a max of 100 (TODO fix this, such that it uses the full gradient length instead of element-wise)
+            gradient[i] = (gradient[i] / std::sqrt(gradient[i].lengthSquared())) * std::fmin(100.f, std::sqrt(gradient[i].lengthSquared()));
+            
         }
         
-        // create two new clusters, by moving in the opposite direction of the gradient
-        for (int i = 0; i < cluster.numberOfPoints; i++)
+        for (size_t i = 0; i < params.numberOfAtoms; i++)
         {
-            gradientCluster1.getPoint(i) = cluster.getPoint(i) - gradient[i] * gradientStepSize;
-            gradientCluster2.getPoint(i) = cluster.getPoint(i) - gradient[i] * (2.f * gradientStepSize);
+            gradientCluster1.getPoint(i) = candidate.first.getPoint(i) - gradient[i] * params.gradientStepSize;
+            gradientCluster2.getPoint(i) = candidate.first.getPoint(i) - gradient[i] * (2.0f * params.gradientStepSize);
         }
+
+        newEnergy1 = gradientCluster1.getClusterEnergy();
+        newEnergy2 = gradientCluster2.getClusterEnergy();
         
-        // calculate the total cluster energies of these 3 clusters
-        originalEnergy = cluster.getClusterEnergy(LeonardJonesSquaredPotential);
-        newEnergy1 = gradientCluster1.getClusterEnergy(LeonardJonesSquaredPotential);
-        newEnergy2 = gradientCluster2.getClusterEnergy(LeonardJonesSquaredPotential);
-        
-        if ((2 * newEnergy2 - 4 * newEnergy1 + 2 * originalEnergy) == 0.f)
+        if (std::abs(2*newEnergy2 - 4*newEnergy1 + 2*candidate.second) < 1e-7f)
             break;
-        float optimalDeflectionFactor = -(newEnergy2 - 4 * newEnergy1 + 3 * originalEnergy)/(2 * newEnergy2 - 4 * newEnergy1 + 2 * originalEnergy);
 
-        // we now have the values at 3 points along the gradient direction. Fitting these points with a quadratic function yields an approximate optimal new cluster
-        cluster.addToPoints(gradient, gradientStepSize * optimalDeflectionFactor);
+        float optimalDeflectionFactor = (4*newEnergy1 - newEnergy2 - 3*candidate.second) / (-4*newEnergy1 + 2*newEnergy2 + 2*candidate.second);
+        candidate.first.addToPoints(gradient, params.gradientStepSize * optimalDeflectionFactor);
 
-        float newEnergy = cluster.getClusterEnergy(LeonardJonesSquaredPotential);
-        if(std::abs(newEnergy - originalEnergy) < 1e-6f)
+        float oldEnergy = candidate.second;
+        candidate.second = candidate.first.getClusterEnergy();
+
+        if (std::abs(candidate.second - oldEnergy) < 1e-6f)
             break;
     }
 }
 
-int FuzzyGlobalOptimizer::getRandomAtomByWeights(std::vector<float>& atomWeights) {
-    discreteDistribution.updateDistribution(atomWeights);
-
-    return discreteDistribution.generate(gen);
-}
-
-DiscretePoint FuzzyGlobalOptimizer::generateUniformRandomPointInSphere(float radius, DiscretePoint center, bool allowZero = true) {
-
+// helper functions
+Point FuzzyGlobalOptimizer::getPointInSphere(std::mt19937& rng, const float radius, const Point& center, const bool allowZero) {
     float u, theta, phi, r;
     int x, y, z;
 
-    // Generate random spherical coordinates
-    u = dist(gen);
+    // generate random spherical coordinates
+    u = uniformDist(rng);
     r = radius * std::cbrt(u);
-    theta = distTheta(gen);
-    phi = distPhi(gen);
+    theta = thetaDist(rng);
+    phi = phiDist(rng);
 
-    // Convert to Cartesian coordinates        
-    x = static_cast<int>(std::round(r * std::sin(phi) * std::cos(theta) / discreteGridSteps));
-    y = static_cast<int>(std::round(r * std::sin(phi) * std::sin(theta) / discreteGridSteps));
-    z = static_cast<int>(std::round(r * std::cos(phi) / discreteGridSteps));
+    // convert to cartesian coordinates    
+    x = static_cast<int>(std::round(r * std::sin(phi) * std::cos(theta) / params.gridSpacing));
+    y = static_cast<int>(std::round(r * std::sin(phi) * std::sin(theta) / params.gridSpacing));
+    z = static_cast<int>(std::round(r * std::cos(phi) / params.gridSpacing));
 
     if(!allowZero && x == 0 && y == 0 && z == 0)
-        generateUniformRandomPointInSphere(radius, center, allowZero);
+        getPointInSphere(rng, radius, center, allowZero);
 
-    return DiscretePoint{center.x + x, center.y + y, center.z + z};
+    return Point{center.x + x * params.gridSpacing, center.y + y * params.gridSpacing, center.z + z * params.gridSpacing};
 }
 
-void FuzzyGlobalOptimizer::setAtomInRandomSphere(DiscreteCluster& cluster, int atomIndex, float radius, DiscretePoint center, bool allowZero = true) {
-    DiscretePoint randomPoint = generateUniformRandomPointInSphere(radius, center, allowZero);
-    
-    cluster.setPoint(atomIndex, randomPoint);
-}
+size_t FuzzyGlobalOptimizer::localDiscreteFrozenOptimization(Cluster& cluster, const size_t freeIndex) {
+    float oldAtomEnergy = cluster.getAtomEnergy(freeIndex);
+    int stepsSinceChange, numChanges, axis;
+    stepsSinceChange = numChanges = axis = 0;
 
-void FuzzyGlobalOptimizer::generateInitialCluster(DiscreteCluster& cluster, float radius) {
-    // assumed is that the cubic grid has equal radius to the spawning sphere. Thus the center of the cube can be retrieved from the sphere radius
-    // here the case of points starting on identical locations is ignored, though this might cause issues later
-    for (size_t i = 0; i < numberOfAtoms; i++)
-        setAtomInRandomSphere(cluster, i, radius, DiscretePoint{static_cast<int>(std::round(radius / discreteGridSteps))});
+    Point& freePoint = cluster.getPoint(freeIndex);
+
+    while (stepsSinceChange < 3) {
+        axis = (++axis) % 3;
+        freePoint[axis] += params.gridSpacing;
+        float newAtomEnergy = cluster.getAtomEnergy(freeIndex);
+
+        if (newAtomEnergy - oldAtomEnergy < 0.0f) {
+            oldAtomEnergy = newAtomEnergy;
+            stepsSinceChange = 0;
+            numChanges++;
+            continue;
+        }
+
+        freePoint[axis] -= 2 * params.gridSpacing;
+        newAtomEnergy = cluster.getAtomEnergy(freeIndex);
+
+        if (newAtomEnergy - oldAtomEnergy < 0.0f) {
+            oldAtomEnergy = newAtomEnergy;
+            stepsSinceChange = 0;
+            numChanges++;
+            continue;
+        }
+
+        freePoint[axis] += 1 * params.gridSpacing;
+        stepsSinceChange++;
+    }
+
+    return numChanges;
 }

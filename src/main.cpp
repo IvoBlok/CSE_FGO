@@ -1,9 +1,10 @@
 #include <iostream>
-#include <chrono>
+#include <fstream>
 
+#include "json.hpp"
 #include "FGO.hpp"
 
-float clusterBestEnergies[151] = {
+const float clusterBestEnergies[151] = {
     0.f,  // Placeholder for index 0 (no cluster with 0 atoms)
     0.f,  // Placeholder for index 1 (no cluster with 1 atom)
     -1.000000f,    // 2 atoms
@@ -157,39 +158,120 @@ float clusterBestEnergies[151] = {
     -893.310258f   // 150 atoms
 };
 
-int main(int argc, char **argv) {
+using json = nlohmann::json;
 
-    std::vector<float> LJLookup;
-    int lookupElementCount = 3 * (int)std::pow((int)(2.1f / 0.02f), 2);
-    LJLookup.reserve(lookupElementCount);
-    
-    // to keep the code simple, here we just calculate the LJ potential for each integer up to the calculated max ( a max established to ensure all standard neighbours are captured)
-    // LJLookup consists of the Leonard-Jones potential at the squared distance given by the index in the lookup. In the calculation here we compensate for the grid spacing
-    for (int i = 0; i < lookupElementCount; i++)
-        LJLookup.emplace_back(LeonardJonesSquaredPotential(i*0.02f*0.02f));
+void to_json(json& j, const Point& p) {
+    j = json{{"x", p.x}, {"y", p.y}, {"z", p.z}};
+}
 
+void to_json(json& j, const Cluster& cluster) {
+    j = json{{"points", cluster.points}};
+}
+
+void to_json(json& j, const SingleRunResult& result) {
+    j = json{
+        {"bestCluster", result.bestCluster},
+        {"bestEnergy", result.bestEnergy},
+        {"candidates", result.candidates},
+        {"totalTime", result.totalTime.count()},
+        {"dmcTime", result.dmcTime.count()},
+        {"realOptTime", result.realOptTime.count()}
+    };
+}
+
+void to_json(json& j, const MultiRunResult& result) {
+    j = json{
+        {"n", result.globalBestCluster.points.size()},
+        {"globalBestCluster", result.globalBestCluster},
+        {"globalBestEnergy", result.globalBestEnergy},
+        {"allRuns", result.allRuns},
+        {"totalTime", result.totalTime.count()},
+        {"averageTime", result.averageTime.count()}
+    };
+}
+
+struct FullBenchmarkResult {
+    struct NResult {
+        MultiRunResult multiRunResult;
+        float exactSolution;
+    };
     
-    for (int clusterSize = 2; clusterSize <= 100; clusterSize++)
-    {
-        int sampleCount = 100;
-        int successfullFinds = 0;
-        int iter = 0;
+    std::vector<NResult> allNResults;
+    std::chrono::microseconds totalBenchmarkTime{0};
+    std::string timestamp;
+};
+
+void to_json(json& j, const FullBenchmarkResult::NResult& nResult) {
+    j = json{
+        {"multiRunResult", nResult.multiRunResult},
+        {"exactSolution", nResult.exactSolution}
+    };
+}
+
+void to_json(json& j, const FullBenchmarkResult& benchmark) {
+    j = json{
+        {"allNResults", benchmark.allNResults},
+        {"totalBenchmarkTime", benchmark.totalBenchmarkTime.count()},
+        {"timestamp", benchmark.timestamp}
+    };
+}
+
+
+int main(int argc, char** argv) {
+    auto startTime = std::chrono::high_resolution_clock::now();
+    
+    FullBenchmarkResult benchmarkResult;
+    
+    const int NUM_RUNS = 25;
+    const int MIN_N = 2;
+    const int MAX_N = 40;
+    
+    for (int n = MIN_N; n <= MAX_N; n++) {
+        std::cout << "Testing N = " << n << "..." << std::endl;
         
-        auto startTime = std::chrono::system_clock::now();
-
-        for (iter = 0; iter < sampleCount; iter++)
-        {
-            FuzzyGlobalOptimizer FGO(clusterSize, LJLookup);
-            FGO.runFGO();
-
-            if (std::abs(FGO.bestClusterEnergy - clusterBestEnergies[clusterSize]) < 0.01f)
-                successfullFinds++;
+        FGOParameters params;
+        params.numberOfAtoms = n;
+        params.spawningRadiusFactor = 0.55;
+        
+        FuzzyGlobalOptimizer optimizer(params);
+        
+        auto multiResult = optimizer.runMultiple(NUM_RUNS);
+        
+        int correctFinds = 0;
+        for (const auto& run : multiResult.allRuns) {
+            if (std::abs(run.bestEnergy - clusterBestEnergies[n]) < 1e-3 || 
+                run.bestEnergy < clusterBestEnergies[n]) {
+                correctFinds++;
+            }
         }
-
-        auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - startTime);
-
-        std::cout << "N=" << clusterSize << " finds / attempts: " << successfullFinds << " / " << iter << " time: " << duration.count() << "s \n";
+        
+        FullBenchmarkResult::NResult nResult;
+        nResult.multiRunResult = std::move(multiResult);
+        nResult.exactSolution = clusterBestEnergies[n];
+        benchmarkResult.allNResults.push_back(nResult);
+        
+        std::cout << "  Success rate: " << correctFinds << "/" << NUM_RUNS << "\n";
+        std::cout << "  Avg time: " << nResult.multiRunResult.averageTime.count() / 1e6 << " seconds\n";
     }
     
-    //int clusterSize = (int)strtol(argv[1], NULL, 10);
+    auto endTime = std::chrono::high_resolution_clock::now();
+    benchmarkResult.totalBenchmarkTime = 
+        std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);
+    
+    // add timestamp
+    auto now = std::chrono::system_clock::now();
+    auto now_c = std::chrono::system_clock::to_time_t(now);
+    std::ostringstream oss;
+    oss << std::put_time(std::localtime(&now_c), "%Y-%m-%d %H:%M:%S");
+    benchmarkResult.timestamp = oss.str();
+    
+    // save to JSON file
+    json j = benchmarkResult;
+    std::ofstream file("benchmark_results.json");
+    file << j.dump(2);
+    
+    std::cout << "\nBenchmark completed in " << benchmarkResult.totalBenchmarkTime.count() / 1e6 << " seconds\n";
+    std::cout << "Results saved to benchmark_results.json\n";
+    
+    return 0;
 }
