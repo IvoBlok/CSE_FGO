@@ -99,7 +99,8 @@ float Cluster::getDistanceSquared(const size_t atomIndex1, const size_t atomInde
 }
 
 float Cluster::getAtomEnergyAVX(size_t atomIndex, const LJCalculator& lj) const {
-    __m256 totalVec = _mm256_setzero_ps();
+    //__m256 totalVec = _mm256_setzero_ps();
+    float total = 0.0f;
 
     __m256 xi = _mm256_set1_ps(x[atomIndex]);
     __m256 yi = _mm256_set1_ps(y[atomIndex]);
@@ -122,12 +123,18 @@ float Cluster::getAtomEnergyAVX(size_t atomIndex, const LJCalculator& lj) const 
 
         __m256 r2 = _mm256_add_ps(dx, _mm256_add_ps(dy, dz));
 
-        // LJ SIMD table lookup
-        __m256 energies = lj.potentialAVX(r2);
+        alignas(32) float r2Vals[8];
+        _mm256_store_ps(r2Vals, r2);
 
-        totalVec = _mm256_add_ps(totalVec, energies);
+        for (size_t k = 0; k < 8; k++)
+            total += lennardJonesSquaredPotential(r2Vals[k]);
+        
+        // LJ SIMD table lookup
+        //__m256 energies = lj.potentialAVX(r2);
+
+        //totalVec = _mm256_add_ps(totalVec, energies);
     }
-    float total = horizontalSumAVX(totalVec);
+    //float total = horizontalSumAVX(totalVec);
 
     // remainder
     for (size_t j = n - (n % 8); j < n; j++) {
@@ -136,8 +143,10 @@ float Cluster::getAtomEnergyAVX(size_t atomIndex, const LJCalculator& lj) const 
         float dz = z[atomIndex] - z[j];
 
         float r2 = dx*dx + dy*dy + dz*dz;
+        total += lennardJonesSquaredPotential(r2);
+        
         // LJ table lookup
-        total += lj.potential(r2);
+        //total += lj.potential(r2);
     }
 
     return total;
