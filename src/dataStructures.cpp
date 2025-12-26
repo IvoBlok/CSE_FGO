@@ -53,6 +53,14 @@ void LJCalculator::buildTables() {
 }
 
 inline float LJCalculator::potential(float r2) const {
+    if (r2 < 1e-10f) return std::numeric_limits<float>::infinity();
+
+    const float inv_r2 = 1.0f / r2;
+    const float inv_r6 = inv_r2 * inv_r2 * inv_r2;
+    const float inv_r12 = inv_r6 * inv_r6;
+
+    return inv_r12 - 2.0f * inv_r6;
+    /*
     size_t index0 = static_cast<size_t>(r2 * INV_STEP);
     index0 = std::min(index0, TABLE_SIZE - 2);
 
@@ -61,9 +69,27 @@ inline float LJCalculator::potential(float r2) const {
     float t = (r2 * INV_STEP) - (float)index0;
 
     return val0 + t * (val1 - val0);
+    */
 }
 
 inline __m256 LJCalculator::potentialAVX(__m256 r2) const {
+    // Add small epsilon to all values to avoid division by zero
+    __m256 r2_safe = _mm256_add_ps(r2, _mm256_set1_ps(1e-10f));
+    
+    // Compute inv_r2 = 1.0f / r2_safe
+    __m256 inv_r2 = _mm256_div_ps(_mm256_set1_ps(1.0f), r2_safe);
+    
+    // Compute inv_r6 = inv_r2 * inv_r2 * inv_r2
+    __m256 inv_r4 = _mm256_mul_ps(inv_r2, inv_r2);      // 1/r^4
+    __m256 inv_r6 = _mm256_mul_ps(inv_r4, inv_r2);      // 1/r^6
+    
+    // Compute inv_r12 = inv_r6 * inv_r6
+    __m256 inv_r12 = _mm256_mul_ps(inv_r6, inv_r6);     // 1/r^12
+    
+    // Compute result = inv_r12 - 2.0f * inv_r6
+    __m256 two_times_inv_r6 = _mm256_mul_ps(_mm256_set1_ps(2.0f), inv_r6);
+    return _mm256_sub_ps(inv_r12, two_times_inv_r6);
+    /*
     __m256 pos = _mm256_mul_ps(r2, _mm256_set1_ps(INV_STEP));
 
     __m256i index0 = _mm256_cvttps_epi32(pos);
@@ -76,6 +102,7 @@ inline __m256 LJCalculator::potentialAVX(__m256 r2) const {
     __m256 t = _mm256_sub_ps(pos, _mm256_cvtepi32_ps(index0));
 
     return _mm256_fmadd_ps(t, _mm256_sub_ps(val1, val0), val0); // linear interpolation: t*(val1 - val0) + val0
+    */
 }
 
 
@@ -99,8 +126,8 @@ float Cluster::getDistanceSquared(const size_t atomIndex1, const size_t atomInde
 }
 
 float Cluster::getAtomEnergyAVX(size_t atomIndex, const LJCalculator& lj) const {
-    //__m256 totalVec = _mm256_setzero_ps();
-    float total = 0.0f;
+    /*
+    __m256 totalVec = _mm256_setzero_ps();
 
     __m256 xi = _mm256_set1_ps(x[atomIndex]);
     __m256 yi = _mm256_set1_ps(y[atomIndex]);
@@ -122,31 +149,31 @@ float Cluster::getAtomEnergyAVX(size_t atomIndex, const LJCalculator& lj) const 
         dz = _mm256_mul_ps(dz, dz);
 
         __m256 r2 = _mm256_add_ps(dx, _mm256_add_ps(dy, dz));
+        __m256 energies = lj.potentialAVX(r2);
 
-        alignas(32) float r2Vals[8];
-        _mm256_store_ps(r2Vals, r2);
+        // if atomIndex is in this block, set its energy to 0
+        if (atomIndex >= j && atomIndex < j + 8) {
+            alignas(32) float mask[8] = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0, 1.0f, 1.0f};
+            mask[atomIndex - j] = 0.0f;
+            __m256 maskVec = _mm256_load_ps(mask);
+            energies = _mm256_mul_ps(energies, maskVec);
+        }
 
-        for (size_t k = 0; k < 8; k++)
-            total += lennardJonesSquaredPotential(r2Vals[k]);
-        
-        // LJ SIMD table lookup
-        //__m256 energies = lj.potentialAVX(r2);
-
-        //totalVec = _mm256_add_ps(totalVec, energies);
+        totalVec = _mm256_add_ps(totalVec, energies);
     }
-    //float total = horizontalSumAVX(totalVec);
-
+    float total = horizontalSumAVX(totalVec);
+    */
+    float total = 0.f;
     // remainder
-    for (size_t j = n - (n % 8); j < n; j++) {
+    //for (size_t j = n - (n % 8); j < n; j++) {
+    for (size_t j = 0; j < n; j++) {
+        if(j == atomIndex) continue;
         float dx = x[atomIndex] - x[j];
         float dy = y[atomIndex] - y[j];
         float dz = z[atomIndex] - z[j];
 
         float r2 = dx*dx + dy*dy + dz*dz;
-        total += lennardJonesSquaredPotential(r2);
-        
-        // LJ table lookup
-        //total += lj.potential(r2);
+        total += lj.potential(r2);
     }
 
     return total;

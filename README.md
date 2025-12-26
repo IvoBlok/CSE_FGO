@@ -15,6 +15,7 @@ I now use perf and hotspot. So for example gather data with 'perf record --call-
 
 TODO
 =========
+ - switch to standard LJ formula 4(r^-6 - r^-12) instead of current r^-6 - 2r^-12
  - parallelization
  - instead of an LJLookup, which as seen before likely has terrible cache performance, maybe just compute it for various points, then interpolate with a simpler function. this can probably be further improved by using SIMD instructions in this operation, since for each AtomEnergy we're doing many independent LJ potential evaluations.
  - Write AVX atomEnergy version that uses neighbours

@@ -297,7 +297,7 @@ size_t FuzzyGlobalOptimizer::localDiscreteFrozenOptimization(Cluster& cluster, c
 
         float newAtomEnergy = cluster.getAtomEnergyAVX(freeIndex, fastLJ);
 
-        if (newAtomEnergy - oldAtomEnergy < 0.0f) {
+        if (newAtomEnergy < oldAtomEnergy) {
             oldAtomEnergy = newAtomEnergy;
             stepsSinceChange = 0;
             numChanges++;
@@ -307,7 +307,7 @@ size_t FuzzyGlobalOptimizer::localDiscreteFrozenOptimization(Cluster& cluster, c
         coord -= 2 * params.gridSpacing;
         newAtomEnergy = cluster.getAtomEnergyAVX(freeIndex, fastLJ);
 
-        if (newAtomEnergy - oldAtomEnergy < 0.0f) {
+        if (newAtomEnergy < oldAtomEnergy) {
             oldAtomEnergy = newAtomEnergy;
             stepsSinceChange = 0;
             numChanges++;
