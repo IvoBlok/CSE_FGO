@@ -4,11 +4,12 @@
 #include <vector>
 #include <array>
 #include <cstddef>
+#include <cmath>
 #include <immintrin.h>
 
-float lennardJonesPotential(float distance);
-float lennardJonesSquaredPotential(float squaredDistance);
-float lennardJonesDerivative(float distance);
+inline float lennardJonesDerivative(float distance) {
+    return -12.f * (std::pow(distance, -13) - std::pow(distance, -7));
+}
 
 
 // this class uses basic interpolation to limit the amount of LJ potential computations we do
@@ -47,10 +48,6 @@ public:
     float getDistanceSquared(size_t atomIndex1, size_t atomIndex2) const;
 
     float getAtomEnergyAVX(size_t atomIndex, const LJCalculator& lj) const;
-    float getAtomEnergy(size_t atomIndex) const;
-    float getAtomEnergy(size_t atomIndex, const std::vector<size_t>& atomsToConsider) const;
-
-    float getClusterEnergy() const;
     float getClusterEnergyAVX(const LJCalculator& lj) const;
     
     void copyTo(Cluster& otherCluster) const;

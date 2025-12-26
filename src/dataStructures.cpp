@@ -8,32 +8,10 @@
 #include <algorithm>
 
 
-float lennardJonesPotential(float distance) {
-    if(distance < 1e-7f)
-        return 0.0f;
-
-    // using 'reduced' units, the LJ potential is simply:
-    return std::pow(distance, -12) - 2.f * std::pow(distance, -6);
-}
-
-float lennardJonesSquaredPotential(float squaredDistance) {
-    if(squaredDistance < 1e-14f)
-        return 0.0f;
-
-    // defines the LJ potential based on a squared distance input. It saves some computation
-    return std::pow(squaredDistance, -6) - 2.f * std::pow(squaredDistance, -3);
-}
-
-float lennardJonesDerivative(float distance) {
-    return -12.f * (std::pow(distance, -13) - std::pow(distance, -7));
-}
-
-
-
 // LJCalculator Implementation
 // ===================================================================================
 LJCalculator::LJCalculator() {
-    buildTables();
+    //buildTables();
 }
 
 void LJCalculator::buildTables() {
@@ -107,7 +85,6 @@ inline __m256 LJCalculator::potentialAVX(__m256 r2) const {
 
 
 
-
 // Cluster Implementation
 // ===================================================================================
 Cluster::Cluster(const size_t numberOfPoints) : x(numberOfPoints), y(numberOfPoints), z(numberOfPoints), n(numberOfPoints) {}
@@ -126,7 +103,18 @@ float Cluster::getDistanceSquared(const size_t atomIndex1, const size_t atomInde
 }
 
 float Cluster::getAtomEnergyAVX(size_t atomIndex, const LJCalculator& lj) const {
-    /*
+    static constexpr int BLEND_MASKS[8] = {
+        0xFE, // 11111110 - clear lane 0
+        0xFD, // 11111101 - clear lane 1  
+        0xFB, // 11111011 - clear lane 2
+        0xF7, // 11110111 - clear lane 3
+        0xEF, // 11101111 - clear lane 4
+        0xDF, // 11011111 - clear lane 5
+        0xBF, // 10111111 - clear lane 6
+        0x7F  // 01111111 - clear lane 7
+    };
+    alignas(32) float energiesArr[8];
+
     __m256 totalVec = _mm256_setzero_ps();
 
     __m256 xi = _mm256_set1_ps(x[atomIndex]);
@@ -153,20 +141,17 @@ float Cluster::getAtomEnergyAVX(size_t atomIndex, const LJCalculator& lj) const 
 
         // if atomIndex is in this block, set its energy to 0
         if (atomIndex >= j && atomIndex < j + 8) {
-            alignas(32) float mask[8] = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0, 1.0f, 1.0f};
-            mask[atomIndex - j] = 0.0f;
-            __m256 maskVec = _mm256_load_ps(mask);
-            energies = _mm256_mul_ps(energies, maskVec);
+            _mm256_store_ps(energiesArr, energies); 
+            energiesArr[atomIndex - j] = 0.0f;
+            energies = _mm256_load_ps(energiesArr);
         }
 
         totalVec = _mm256_add_ps(totalVec, energies);
     }
     float total = horizontalSumAVX(totalVec);
-    */
-    float total = 0.f;
+
     // remainder
-    //for (size_t j = n - (n % 8); j < n; j++) {
-    for (size_t j = 0; j < n; j++) {
+    for (size_t j = n - (n % 8); j < n; j++) {
         if(j == atomIndex) continue;
         float dx = x[atomIndex] - x[j];
         float dy = y[atomIndex] - y[j];
@@ -178,41 +163,6 @@ float Cluster::getAtomEnergyAVX(size_t atomIndex, const LJCalculator& lj) const 
 
     return total;
 };
-
-float Cluster::getAtomEnergy(size_t atomIndex) const {
-    float total = 0.f;
-
-    for (size_t j = 0; j < n; j++)
-    {   
-        if (atomIndex != j) {
-            const float squaredDistance = getDistanceSquared(atomIndex, j);
-            total += lennardJonesSquaredPotential(squaredDistance);
-        }
-    }
-    return total;
-}
-
-float Cluster::getAtomEnergy(size_t atomIndex, const std::vector<size_t>& atomsToConsider) const {
-    float total = 0.f;
-
-    for (const size_t& atom : atomsToConsider)
-    {
-        if (atomIndex != atom) {
-            const float squaredDistance = getDistanceSquared(atomIndex, atom);
-            total += lennardJonesSquaredPotential(squaredDistance);
-        }
-    }
-    return total;
-}
-
-float Cluster::getClusterEnergy() const {
-    float total = 0.f;
-
-    for (size_t i = 0; i < n; i++)
-        total += getAtomEnergy(i);
-
-    return total * 0.5f;    
-}
 
 float Cluster::getClusterEnergyAVX(const LJCalculator& lj) const {
     float total = 0.f;
