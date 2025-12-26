@@ -9,16 +9,16 @@
 
 
 float lennardJonesPotential(float distance) {
-    if(distance < 0.1f)
-        return std::numeric_limits<float>::infinity();
+    if(distance < 1e-7f)
+        return 0.0f;
 
     // using 'reduced' units, the LJ potential is simply:
     return std::pow(distance, -12) - 2.f * std::pow(distance, -6);
 }
 
 float lennardJonesSquaredPotential(float squaredDistance) {
-    if(squaredDistance < 0.01f)
-        return std::numeric_limits<float>::infinity();
+    if(squaredDistance < 1e-14f)
+        return 0.0f;
 
     // defines the LJ potential based on a squared distance input. It saves some computation
     return std::pow(squaredDistance, -6) - 2.f * std::pow(squaredDistance, -3);
@@ -107,9 +107,9 @@ float Cluster::getAtomEnergyAVX(size_t atomIndex, const LJCalculator& lj) const 
 
     for (size_t j = 0; j + 8 <= n; j += 8) {
         // load 8 points
-        __m256 xj = _mm256_load_ps(&x[j]);
-        __m256 yj = _mm256_load_ps(&y[j]);
-        __m256 zj = _mm256_load_ps(&z[j]);
+        __m256 xj = _mm256_loadu_ps(&x[j]);
+        __m256 yj = _mm256_loadu_ps(&y[j]);
+        __m256 zj = _mm256_loadu_ps(&z[j]);
 
         // compute squared distances
         __m256 dx = _mm256_sub_ps(xi, xj);
