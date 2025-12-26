@@ -28,8 +28,11 @@ public:
 struct Cluster {
 public:
     alignas(64) std::vector<float> x, y, z;
-    size_t n = 0;
-    
+    size_t n;
+private:
+    size_t nPadded;
+
+public:
     Cluster() = default;
     explicit Cluster(const size_t numberOfPoints);
 

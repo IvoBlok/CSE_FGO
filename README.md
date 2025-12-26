@@ -15,14 +15,12 @@ I now use perf and hotspot. So for example gather data with 'perf record --call-
 
 TODO
 =========
- - switch to standard LJ formula 4(r^-6 - r^-12) instead of current r^-6 - 2r^-12
  - parallelization
- - instead of an LJLookup, which as seen before likely has terrible cache performance, maybe just compute it for various points, then interpolate with a simpler function. this can probably be further improved by using SIMD instructions in this operation, since for each AtomEnergy we're doing many independent LJ potential evaluations.
+ - check lookup tables / interpolation methods etc for LJPotential evaluations, since current versions just calculate the potential (very quickly)
  - Write AVX atomEnergy version that uses neighbours
  - rewrite gradient calculation using SIMD instructions
  - Only check energy with neighbours in the localDiscreteFrozenOptimization steps
- - Any smart way of precalculating the potentials at discrete distances should drastically improve performance; given that the cache layout is good enough for it to be worth it. 
  - In a similar vein, in many cases we don't need to calculate clusterPotential from scratch, since generally only 1 or 2 atoms got moved; we just need to calculate the change these moves caused
  - discreteDistribution uses an implementation that can be quite costly to be initialized; since we generally only generate it once, then sample it once, a faster algorithm is possible (linear search, or something better if I can find that). Each DMC we only move 1 atom, so we can probably also make use of the fact that most weights change very little. 
  - Investigate the drastically lower success percentage compared to the paper results
- - Investigate local real optimization. Potentially normalizing the gradient in one way or another might be an improvement. etc...
+ - Investigate local real optimization. Potentially normalizing the gradient in one way or another might be an improvement. etc..., or something like replacing the quadratic fitting for line-search + armijo rule or smth

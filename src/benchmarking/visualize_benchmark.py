@@ -153,6 +153,8 @@ def create_energy_boxplot(ax, plot_data):
             # Draw line across the entire boxplot
             ax.hlines(y=exact, xmin=i - width/2, xmax=i + width/2, 
                      color='red', linestyle='--', linewidth=2, alpha=0.7)
+    
+    ax.set_ylim([None, 0])
     ax.set_xlabel('N')
     ax.set_ylabel('Energy [-]')
     ax.set_title('Energy Distribution of Candidates by N')

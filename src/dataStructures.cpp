@@ -39,7 +39,8 @@ inline __m256 LJCalculator::potentialAVX(__m256 r2) const {
 
 // Cluster Implementation
 // ===================================================================================
-Cluster::Cluster(const size_t numberOfPoints) : x(numberOfPoints), y(numberOfPoints), z(numberOfPoints), n(numberOfPoints) {}
+// make the vectors with lengts of a multiple of 8, such that SIMD instructions can be optimally used in getAtomEnergyAVX
+Cluster::Cluster(const size_t numberOfPoints) : x((numberOfPoints + 7) & ~size_t(7)), y((numberOfPoints + 7) & ~size_t(7)), z((numberOfPoints + 7) & ~size_t(7)), n(numberOfPoints), nPadded((numberOfPoints + 7) & ~size_t(7)) {}
 
 void Cluster::setPoint(const size_t atomIndex, const float xVal, const float yVal, const float zVal) {
     x[atomIndex] = xVal;
@@ -55,16 +56,6 @@ float Cluster::getDistanceSquared(const size_t atomIndex1, const size_t atomInde
 }
 
 float Cluster::getAtomEnergyAVX(size_t atomIndex, const LJCalculator& lj) const {
-    static constexpr int BLEND_MASKS[8] = {
-        0xFE, // 11111110 - clear lane 0
-        0xFD, // 11111101 - clear lane 1  
-        0xFB, // 11111011 - clear lane 2
-        0xF7, // 11110111 - clear lane 3
-        0xEF, // 11101111 - clear lane 4
-        0xDF, // 11011111 - clear lane 5
-        0xBF, // 10111111 - clear lane 6
-        0x7F  // 01111111 - clear lane 7
-    };
     alignas(32) float energiesArr[8];
 
     __m256 totalVec = _mm256_setzero_ps();
@@ -73,7 +64,7 @@ float Cluster::getAtomEnergyAVX(size_t atomIndex, const LJCalculator& lj) const 
     __m256 yi = _mm256_set1_ps(y[atomIndex]);
     __m256 zi = _mm256_set1_ps(z[atomIndex]);
 
-    for (size_t j = 0; j + 8 <= n; j += 8) {
+    for (size_t j = 0; j < nPadded; j += 8) {
         // load 8 points
         __m256 xj = _mm256_loadu_ps(&x[j]);
         __m256 yj = _mm256_loadu_ps(&y[j]);
@@ -97,23 +88,17 @@ float Cluster::getAtomEnergyAVX(size_t atomIndex, const LJCalculator& lj) const 
             energiesArr[atomIndex - j] = 0.0f;
             energies = _mm256_load_ps(energiesArr);
         }
+        // if this block was partially in the invalid padded part, negate the contribution of the padded entries
+        if (j + 8 > n) {
+            _mm256_store_ps(energiesArr, energies); 
+            for (size_t k = n; k < j + 8; k++)
+                energiesArr[k - j] = 0.0f;
+            energies = _mm256_load_ps(energiesArr);
+        }
 
         totalVec = _mm256_add_ps(totalVec, energies);
     }
-    float total = horizontalSumAVX(totalVec);
-
-    // remainder
-    for (size_t j = n - (n % 8); j < n; j++) {
-        if(j == atomIndex) continue;
-        float dx = x[atomIndex] - x[j];
-        float dy = y[atomIndex] - y[j];
-        float dz = z[atomIndex] - z[j];
-
-        float r2 = dx*dx + dy*dy + dz*dz;
-        total += lj.potential(r2);
-    }
-
-    return total;
+    return horizontalSumAVX(totalVec);
 };
 
 float Cluster::getClusterEnergyAVX(const LJCalculator& lj) const {
@@ -130,6 +115,7 @@ void Cluster::copyTo(Cluster& otherCluster) const {
     otherCluster.y = y;
     otherCluster.z = z;
     otherCluster.n = n;
+    otherCluster.nPadded = nPadded;
 }
 
 float Cluster::horizontalSumAVX(__m256 vals) {
