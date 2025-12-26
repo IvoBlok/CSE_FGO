@@ -11,10 +11,10 @@
 # define M_PI           3.14159265358979323846  /* pi */
 
 FuzzyGlobalOptimizer::FuzzyGlobalOptimizer(const FGOParameters& params)
-    : params(params), atomSelector(DiscreteDistribution(params.numberOfAtoms)), rng(std::random_device{}()) {}
+    : params(params), atomSelector(DiscreteDistribution(params.numberOfAtoms)), rng(std::random_device{}()), fastLJ(LJCalculator{}) {}
 
 FuzzyGlobalOptimizer::FuzzyGlobalOptimizer(FGOParameters&& params)
-    : params(std::move(params)), atomSelector(DiscreteDistribution(params.numberOfAtoms)), rng(std::random_device{}()) {}
+    : params(std::move(params)), atomSelector(DiscreteDistribution(params.numberOfAtoms)), rng(std::random_device{}()), fastLJ(LJCalculator{}) {}
 
 SingleRunResult FuzzyGlobalOptimizer::runSingle() {
     return runSingle(rng);
@@ -288,10 +288,6 @@ size_t FuzzyGlobalOptimizer::localDiscreteFrozenOptimization(Cluster& cluster, c
     float oldAtomEnergy = cluster.getAtomEnergy(freeIndex);
     int stepsSinceChange, numChanges, axis;
     stepsSinceChange = numChanges = axis = 0;
-
-    float& x = cluster.x[freeIndex];
-    float& y = cluster.y[freeIndex];
-    float& z = cluster.z[freeIndex];
 
     while (stepsSinceChange < 3) {
         axis = (++axis) % 3;

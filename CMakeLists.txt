@@ -20,10 +20,10 @@ add_executable(main
     ${COMMON_SOURCES}
 )
 
-target_compile_options(main_debug PRIVATE -g -pg)
+target_compile_options(main_debug PRIVATE -g -pg -march=native -mavx -mavx2)
 target_link_options(main_debug PRIVATE -g -pg)
 
-target_compile_options(main PRIVATE -O3 -march=native -ffast-math -funroll-loops)
+target_compile_options(main PRIVATE -O3 -march=native -mavx -mavx2 -ffast-math -funroll-loops)
 target_link_options(main PRIVATE -O3)
 
 target_link_libraries(main_debug PRIVATE ${CMAKE_THREAD_LIBS_INIT})

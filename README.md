@@ -17,6 +17,8 @@ TODO
 =========
  - parallelization
  - instead of an LJLookup, which as seen before likely has terrible cache performance, maybe just compute it for various points, then interpolate with a simpler function. this can probably be further improved by using SIMD instructions in this operation, since for each AtomEnergy we're doing many independent LJ potential evaluations.
+ - Write AVX atomEnergy version that uses neighbours
+ - rewrite gradient calculation using SIMD instructions
  - Only check energy with neighbours in the localDiscreteFrozenOptimization steps
  - Any smart way of precalculating the potentials at discrete distances should drastically improve performance; given that the cache layout is good enough for it to be worth it. 
  - In a similar vein, in many cases we don't need to calculate clusterPotential from scratch, since generally only 1 or 2 atoms got moved; we just need to calculate the change these moves caused

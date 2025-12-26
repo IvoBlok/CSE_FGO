@@ -79,6 +79,8 @@ private:
         size_t bestIndex = 0;
     };
 
+    LJCalculator fastLJ;
+
 public:
     explicit FuzzyGlobalOptimizer(const FGOParameters& params);
     explicit FuzzyGlobalOptimizer(FGOParameters&& params);
