@@ -73,7 +73,7 @@ def extract_plot_data(data):
 def create_timing_plot(ax, plot_data):
     n_values = sorted(plot_data.keys())
 
-    total_avgs = []
+    total_time = 0
     dmc_avgs = []
     real_opt_avgs = []
     other_avgs = []
@@ -81,26 +81,29 @@ def create_timing_plot(ax, plot_data):
     for n in n_values:
         data = plot_data[n]
 
-        avg_total = np.mean(data['total'])
+        total_time += np.sum(data['total'])
         avg_dmc = np.mean(data['dmc'])
         avg_real_opt = np.mean(data['real_opt'])
         avg_other = np.mean(data['other'])
 
-        total_avgs.append(avg_total)
         dmc_avgs.append(avg_dmc)
         real_opt_avgs.append(avg_real_opt)
         other_avgs.append(avg_other)
-    
+
+    dmc_avgs = np.array(dmc_avgs)
+    real_opt_avgs = np.array(real_opt_avgs)
+    other_avgs = np.array(other_avgs)
+
     x = np.arange(len(n_values))
     width = 0.6
 
-    dmc_bars = ax.bar(x, dmc_avgs, width, label='DMC', color='steelblue', edgecolor='black')
+    other_bars = ax.bar(x, real_opt_avgs + dmc_avgs + other_avgs, width, label='Other', color='lightgreen', edgecolor='black')
+    dmc_bars = ax.bar(x, real_opt_avgs + dmc_avgs, width, label='DMC', color='steelblue', edgecolor='black')
     real_opt_bars = ax.bar(x, real_opt_avgs, width, label='realOpt', color='lightcoral', edgecolor='black')
-    other_bars = ax.bar(x, other_avgs, width, label='Other', color='lightgreen', edgecolor='black')
 
     ax.set_xlabel('N')
     ax.set_ylabel('Average time for Single Run [s]')
-    ax.set_title('Time Breakdown by N')
+    ax.set_title(f'Time Breakdown by N, Total: {total_time:.1f}s')
     ax.set_xticks(x)
     ax.set_xticklabels([str(n) for n in n_values])
     ax.legend(loc='upper left')

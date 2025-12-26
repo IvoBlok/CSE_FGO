@@ -10,26 +10,6 @@
 
 // LJCalculator Implementation
 // ===================================================================================
-LJCalculator::LJCalculator() {
-    //buildTables();
-}
-
-void LJCalculator::buildTables() {
-    for (size_t i = 0; i < TABLE_SIZE; i++) {
-        float r2 = i * (1.0f / INV_STEP);
-
-        // special case to ensure that if the LJ potential between an atom and itself is 0
-        if (i <= 1) {
-            ljPotentialTable[i] = 0.0f;
-        } else {
-            float r6_inv = 1.0f / (r2 * r2 * r2);
-            float r12_inv = r6_inv * r6_inv;
-
-            ljPotentialTable[i] = r12_inv - 2.0f * r6_inv;
-        }
-    }
-}
-
 inline float LJCalculator::potential(float r2) const {
     if (r2 < 1e-10f) return std::numeric_limits<float>::infinity();
 
@@ -38,49 +18,21 @@ inline float LJCalculator::potential(float r2) const {
     const float inv_r12 = inv_r6 * inv_r6;
 
     return inv_r12 - 2.0f * inv_r6;
-    /*
-    size_t index0 = static_cast<size_t>(r2 * INV_STEP);
-    index0 = std::min(index0, TABLE_SIZE - 2);
-
-    float val0 = ljPotentialTable[index0];
-    float val1 = ljPotentialTable[index0 + 1];
-    float t = (r2 * INV_STEP) - (float)index0;
-
-    return val0 + t * (val1 - val0);
-    */
 }
 
 inline __m256 LJCalculator::potentialAVX(__m256 r2) const {
-    // Add small epsilon to all values to avoid division by zero
-    __m256 r2_safe = _mm256_add_ps(r2, _mm256_set1_ps(1e-10f));
+    // add small epsilon to all values to avoid division by zero
+    __m256 r2_safe = _mm256_add_ps(r2, EPS);
     
-    // Compute inv_r2 = 1.0f / r2_safe
-    __m256 inv_r2 = _mm256_div_ps(_mm256_set1_ps(1.0f), r2_safe);
+    // approximate 1/r2 by rcp + a Newton-Raphson refinement step
+    __m256 inv_r2 = _mm256_rcp_ps(r2_safe);
+    inv_r2 = _mm256_mul_ps(inv_r2, _mm256_fnmadd_ps(r2_safe, inv_r2, TWO));
     
-    // Compute inv_r6 = inv_r2 * inv_r2 * inv_r2
-    __m256 inv_r4 = _mm256_mul_ps(inv_r2, inv_r2);      // 1/r^4
-    __m256 inv_r6 = _mm256_mul_ps(inv_r4, inv_r2);      // 1/r^6
+    __m256 inv_r4 = _mm256_mul_ps(inv_r2, inv_r2);
+    __m256 inv_r6 = _mm256_mul_ps(inv_r4, inv_r2);
+    __m256 inv_r12 = _mm256_mul_ps(inv_r6, inv_r6);
     
-    // Compute inv_r12 = inv_r6 * inv_r6
-    __m256 inv_r12 = _mm256_mul_ps(inv_r6, inv_r6);     // 1/r^12
-    
-    // Compute result = inv_r12 - 2.0f * inv_r6
-    __m256 two_times_inv_r6 = _mm256_mul_ps(_mm256_set1_ps(2.0f), inv_r6);
-    return _mm256_sub_ps(inv_r12, two_times_inv_r6);
-    /*
-    __m256 pos = _mm256_mul_ps(r2, _mm256_set1_ps(INV_STEP));
-
-    __m256i index0 = _mm256_cvttps_epi32(pos);
-    index0 = _mm256_min_epi32(index0, _mm256_set1_epi32(TABLE_SIZE - 2));
-    __m256i index1 = _mm256_add_epi32(index0, _mm256_set1_epi32(1));
-
-    __m256 val0 = _mm256_i32gather_ps(ljPotentialTable.data(), index0, 4);
-    __m256 val1 = _mm256_i32gather_ps(ljPotentialTable.data(), index1, 4);
-
-    __m256 t = _mm256_sub_ps(pos, _mm256_cvtepi32_ps(index0));
-
-    return _mm256_fmadd_ps(t, _mm256_sub_ps(val1, val0), val0); // linear interpolation: t*(val1 - val0) + val0
-    */
+    return _mm256_fnmadd_ps(inv_r6, TWO, inv_r12);
 }
 
 

@@ -15,20 +15,13 @@ inline float lennardJonesDerivative(float distance) {
 // this class uses basic interpolation to limit the amount of LJ potential computations we do
 // this version uses an equally spaced grid in (0, 25) in r^2 'space'. This doesn't create an ideal spacing with many points outside area's of high detail
 // TODO improve the interpolation choice / grid choice
-class LJCalculator {
+struct LJCalculator {
 private:
-    static constexpr size_t TABLE_SIZE = 1024;
-    static constexpr float MAX_R2 = 25.0f;
-    static constexpr float INV_STEP = (TABLE_SIZE - 1) / MAX_R2;
-    
-    alignas(64) std::array<float, TABLE_SIZE> ljPotentialTable;
-
+    const __m256 TWO = _mm256_set1_ps(2.0f);
+    const __m256 EPS = _mm256_set1_ps(1e-10f);
 public:
-    LJCalculator();
-    void buildTables();
-
     inline float potential(float r2) const;
-    __m256 potentialAVX(__m256 r2) const;
+    inline __m256 potentialAVX(__m256 r2) const;
 };
 
 

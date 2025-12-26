@@ -11,10 +11,10 @@
 # define M_PI           3.14159265358979323846  /* pi */
 
 FuzzyGlobalOptimizer::FuzzyGlobalOptimizer(const FGOParameters& params)
-    : params(params), atomSelector(DiscreteDistribution(params.numberOfAtoms)), rng(std::random_device{}()), fastLJ(LJCalculator{}) {}
+    : params(params), atomSelector(DiscreteDistribution(params.numberOfAtoms)), rng(std::random_device{}()) {}
 
 FuzzyGlobalOptimizer::FuzzyGlobalOptimizer(FGOParameters&& params)
-    : params(std::move(params)), atomSelector(DiscreteDistribution(params.numberOfAtoms)), rng(std::random_device{}()), fastLJ(LJCalculator{}) {}
+    : params(std::move(params)), atomSelector(DiscreteDistribution(params.numberOfAtoms)), rng(std::random_device{}()) {}
 
 SingleRunResult FuzzyGlobalOptimizer::runSingle() {
     return runSingle(rng);
