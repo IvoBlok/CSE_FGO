@@ -36,6 +36,7 @@ target_compile_options(main_debug PRIVATE
         -march=native
         -mavx2
         -mfma
+        -fno-omit-frame-pointer
         -fno-optimize-sibling-calls
     >
 )

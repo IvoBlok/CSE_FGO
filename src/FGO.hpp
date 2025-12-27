@@ -26,14 +26,14 @@ struct FGOParameters {
         float invActiveEnergy;
         float targetEnergy;
         float inv2Sigma2;
-        float acceptanceEnergy;
+        float invAcceptanceEnergy;
         float convergenceFactor;
 
         DMCParameters(float activeEnergy, float targetEnergy, float targetSigma, float acceptanceEnergy, float convergenceFactor)
          :  invActiveEnergy(1.0f / activeEnergy),
             targetEnergy(targetEnergy),
             inv2Sigma2(-0.5f / (targetSigma * targetSigma)),
-            acceptanceEnergy(acceptanceEnergy),
+            invAcceptanceEnergy(1.0f / acceptanceEnergy),
             convergenceFactor(convergenceFactor) {}
     };
     DMCParameters dmcLayer1 = DMCParameters(1.0f, -4.1f, 1.25f, 0.4f, 2.5f);

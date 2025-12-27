@@ -178,8 +178,7 @@ void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMC
         float deltaAtomEnergy = candidate.getAtomEnergyAVX(activeAtom, fastLJ) - atomEnergies[activeAtom];
 
         stepsSinceImprovement++;
-        float acceptanceThreshold = uniformDist(rng);
-        if (deltaAtomEnergy < 0.0f || acceptanceThreshold < std::exp(-deltaAtomEnergy / dmcParams.acceptanceEnergy)) {
+        if (deltaAtomEnergy < 0.0f || uniformDist(rng) < fast_exp(-deltaAtomEnergy * dmcParams.invAcceptanceEnergy)) {
             localDiscreteOptimization(candidate);
 
             float candidateEnergy = candidate.getClusterEnergyAVX(fastLJ);
