@@ -16,7 +16,7 @@ I now use perf and hotspot. So for example gather data with 'perf record --call-
 TODO
 =========
  - rewrite gradient calculation using SIMD instructions?
- - Try to implement L-BFGS for localRealOptimization; try with stepsize=1, and only half it if the energy drops for the starting stepsize. Fix center of mass
+ - Try to implement L-BFGS for localRealOptimization; try with stepsize=1, and only half it if the energy drops for the starting stepsize. Fix center of mass. Look into preconditioning
  - check spawnRadiusFactor = 0.4
  - parallelization
  - check lookup tables / interpolation methods etc for LJPotential evaluations, since current versions just calculate the potential (very quickly)
