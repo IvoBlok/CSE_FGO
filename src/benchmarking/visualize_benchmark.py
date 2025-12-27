@@ -177,7 +177,7 @@ def create_energy_boxplot(ax, plot_data):
                 ha='center', va='top',
                 fontsize=8,
                 color='grey',
-                rotation=0,
+                rotation=-90,
         )
     
     ax.set_ylim([None, 0])

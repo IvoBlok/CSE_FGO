@@ -82,6 +82,8 @@ private:
     struct RunState {
         std::vector<std::pair<Cluster, float>> candidates;
         size_t bestIndex = 0;
+
+        Cluster DMCWalker;
     };
 
     LJCalculator fastLJ;

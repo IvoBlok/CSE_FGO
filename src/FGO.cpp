@@ -50,6 +50,7 @@ SingleRunResult FuzzyGlobalOptimizer::runSingle(std::mt19937& rng) {
     startCandidate.second = startCandidate.first.getClusterEnergyAVX(fastLJ);
 
     auto startDMC1 = std::chrono::high_resolution_clock::now();
+    state.DMCWalker = startCandidate.first;
     runDMCLayer(state, params.dmcLayer1, rng);
     auto endDMC1 = std::chrono::high_resolution_clock::now();
     runDMCLayer(state, params.dmcLayer2, rng);
@@ -128,19 +129,21 @@ void FuzzyGlobalOptimizer::initializeCluster(Cluster& cluster, std::mt19937& rng
 
 void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMCParameters& dmcParams, std::mt19937& rng) {
     size_t stepsSinceImprovement = 0;
-    Cluster candidate{params.numberOfAtoms};
+    
+    Cluster proposal{params.numberOfAtoms};
+    Cluster& walker = state.DMCWalker;
+
     std::vector<float> atomEnergies(params.numberOfAtoms);
     std::vector<float> activeWeights(params.numberOfAtoms);
     std::vector<float> targetWeights(params.numberOfAtoms);
 
-    while (stepsSinceImprovement < (size_t)(params.numberOfAtoms * params.numberOfAtoms * dmcParams.convergenceFactor)) {
-        const auto& currCandidate = state.candidates.back();
 
+    while (stepsSinceImprovement < (size_t)(params.numberOfAtoms * params.numberOfAtoms * dmcParams.convergenceFactor)) {
         // calculate distribution weights
         float sumActive = 0.f, sumTarget = 0.f;
         for (size_t i = 0; i < params.numberOfAtoms; i++)
         {
-            const float E = currCandidate.first.getAtomEnergyAVX(i, fastLJ);
+            const float E = walker.getAtomEnergyAVX(i, fastLJ);
             atomEnergies[i] = E;
             
             const float wa = fast_exp(E * dmcParams.invActiveEnergy);
@@ -171,23 +174,24 @@ void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMC
             if (uniform <= accumulate) break;
         }
 
-        currCandidate.first.copyTo(candidate);
-        setPointInSphere(candidate, activeAtom, rng, 1.0f, candidate.x[targetAtom], candidate.y[targetAtom], candidate.z[targetAtom], false);
+        walker.copyTo(proposal);
+        setPointInSphere(proposal, activeAtom, rng, 1.0f, proposal.x[targetAtom], proposal.y[targetAtom], proposal.z[targetAtom], false);
 
-        localDiscreteFrozenOptimization(candidate, activeAtom);
+        localDiscreteFrozenOptimization(proposal, activeAtom);
 
-        float deltaAtomEnergy = candidate.getAtomEnergyAVX(activeAtom, fastLJ) - atomEnergies[activeAtom];
+        float deltaAtomEnergy = proposal.getAtomEnergyAVX(activeAtom, fastLJ) - atomEnergies[activeAtom];
 
         stepsSinceImprovement++;
         if (deltaAtomEnergy < 0.0f || uniformDist(rng) < fast_exp(-deltaAtomEnergy * dmcParams.invAcceptanceEnergy)) {
-            localDiscreteOptimization(candidate);
+            localDiscreteOptimization(proposal);
 
-            float candidateEnergy = candidate.getClusterEnergyAVX(fastLJ);
-            if(candidateEnergy < state.candidates[state.bestIndex].second) {
+            float candidateEnergy = proposal.getClusterEnergyAVX(fastLJ);
+            if(candidateEnergy < state.candidates.back().second) { // the back is guaranteed to be the best
                 state.bestIndex = state.candidates.size();
-                state.candidates.emplace_back(candidate, candidateEnergy);
+                state.candidates.emplace_back(proposal, candidateEnergy);
                 stepsSinceImprovement = 0;
             }
+            walker = proposal; // copy data from proposal into walker, regardless of if proposal is a new best
         }
     }
 }
