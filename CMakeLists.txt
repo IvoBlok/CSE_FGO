@@ -7,7 +7,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(COMMON_SOURCES
     src/FGO.cpp
     src/dataStructures.cpp
-    src/discreteDistribution.cpp
 )
 
 # main (performance) build

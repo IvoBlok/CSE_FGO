@@ -2,7 +2,6 @@
 #define FUZZY_GLOBAL_OPTIMIZER_H
 
 #include "dataStructures.hpp"
-#include "discreteDistribution.hpp"
 
 #include <iostream>
 #include <cmath>
@@ -24,15 +23,21 @@ struct FGOParameters {
     float gradientStepSize = 0.001f;
 
     struct DMCParameters {
-        float activeEnergy;
+        float invActiveEnergy;
         float targetEnergy;
-        float targetSigma;
+        float inv2Sigma2;
         float acceptanceEnergy;
         float convergenceFactor;
-    };
 
-    DMCParameters dmcLayer1{1.0f, -4.1f, 1.25f, 0.4f, 2.5f};
-    DMCParameters dmcLayer2{1.0f, -11.0f, 1.3f, 0.3f, 1.5f};
+        DMCParameters(float activeEnergy, float targetEnergy, float targetSigma, float acceptanceEnergy, float convergenceFactor)
+         :  invActiveEnergy(1.0f / activeEnergy),
+            targetEnergy(targetEnergy),
+            inv2Sigma2(-0.5f / (targetSigma * targetSigma)),
+            acceptanceEnergy(acceptanceEnergy),
+            convergenceFactor(convergenceFactor) {}
+    };
+    DMCParameters dmcLayer1 = DMCParameters(1.0f, -4.1f, 1.25f, 0.4f, 2.5f);
+    DMCParameters dmcLayer2 = DMCParameters(1.0f, -11.0f, 1.3f, 0.3f, 1.5f);
 
     float spawningRadiusFactor = 0.4f;
 
@@ -67,7 +72,6 @@ struct MultiRunResult {
 class FuzzyGlobalOptimizer {
 private: 
     FGOParameters params;
-    DiscreteDistribution atomSelector;
     std::mt19937 rng;
 
     std::uniform_real_distribution<float> uniformDist{0.0f, 1.0f};

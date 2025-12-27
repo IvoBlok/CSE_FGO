@@ -10,11 +10,24 @@
 
 # define M_PI           3.14159265358979323846  /* pi */
 
+inline float fast_exp(float x)
+{
+    x = std::max(-50.0f, std::min(50.0f, x));
+    x *= 1.4426950408889634f;
+
+    int i = static_cast<int>(x);
+    float f = x - i;
+
+    float p = 1.0f + f * (0.69314718f + f * (0.24022651f + f * 0.05550411f));
+    return std::ldexp(p, i);
+}
+
+
 FuzzyGlobalOptimizer::FuzzyGlobalOptimizer(const FGOParameters& params)
-    : params(params), atomSelector(DiscreteDistribution(params.numberOfAtoms)), rng(std::random_device{}()) {}
+    : params(params), rng(std::random_device{}()) {}
 
 FuzzyGlobalOptimizer::FuzzyGlobalOptimizer(FGOParameters&& params)
-    : params(std::move(params)), atomSelector(DiscreteDistribution(params.numberOfAtoms)), rng(std::random_device{}()) {}
+    : params(std::move(params)), rng(std::random_device{}()) {}
 
 SingleRunResult FuzzyGlobalOptimizer::runSingle() {
     return runSingle(rng);
@@ -114,9 +127,7 @@ void FuzzyGlobalOptimizer::initializeCluster(Cluster& cluster, std::mt19937& rng
 
 void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMCParameters& dmcParams, std::mt19937& rng) {
     size_t stepsSinceImprovement = 0;
-
     Cluster candidate{params.numberOfAtoms};
-
     std::vector<float> atomEnergies(params.numberOfAtoms);
     std::vector<float> activeWeights(params.numberOfAtoms);
     std::vector<float> targetWeights(params.numberOfAtoms);
@@ -124,18 +135,40 @@ void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMC
     while (stepsSinceImprovement < (size_t)(params.numberOfAtoms * params.numberOfAtoms * dmcParams.convergenceFactor)) {
         const auto& currCandidate = state.candidates.back();
 
+        // calculate distribution weights
+        float sumActive = 0.f, sumTarget = 0.f;
         for (size_t i = 0; i < params.numberOfAtoms; i++)
         {
-            atomEnergies[i] = currCandidate.first.getAtomEnergyAVX(i, fastLJ);
+            const float E = currCandidate.first.getAtomEnergyAVX(i, fastLJ);
+            atomEnergies[i] = E;
+            
+            const float wa = fast_exp(E * dmcParams.invActiveEnergy);
+            const float d = E - dmcParams.targetEnergy;
+            const float wt = fast_exp(d * d * dmcParams.inv2Sigma2);
 
-            activeWeights[i] = std::exp(atomEnergies[i] / dmcParams.activeEnergy);
-            targetWeights[i] = std::exp(-0.5 * std::pow(atomEnergies[i] - dmcParams.targetEnergy, 2) / std::pow(dmcParams.targetSigma, 2));
+            activeWeights[i] = wa;
+            targetWeights[i] = wt;
+
+            sumActive += wa;
+            sumTarget += wt;
         }
-        
-        atomSelector.updateDistribution(activeWeights);
-        size_t activeAtom = atomSelector.generate(rng);
-        atomSelector.updateDistribution(targetWeights);
-        size_t targetAtom = atomSelector.generate(rng);
+
+        // sample distributions, once for both
+        float uniform = uniformDist(rng) * sumActive;
+        float accumulate = 0.f;
+        size_t activeAtom = 0;
+        for (; activeAtom < params.numberOfAtoms; activeAtom++) {
+            accumulate += activeWeights[activeAtom];
+            if (uniform <= accumulate) break;
+        }
+
+        uniform = uniformDist(rng) * sumTarget;
+        accumulate = 0.f;
+        size_t targetAtom = 0;
+        for (; targetAtom < params.numberOfAtoms; targetAtom++) {
+            accumulate += activeWeights[targetAtom];
+            if (uniform <= accumulate) break;
+        }
 
         currCandidate.first.copyTo(candidate);
         setPointInSphere(candidate, activeAtom, rng, 1.0f, candidate.x[targetAtom], candidate.y[targetAtom], candidate.z[targetAtom], false);
@@ -200,9 +233,8 @@ void FuzzyGlobalOptimizer::localRealOptimization(std::pair<Cluster, float>& cand
                 const float dy = yi - cluster.y[j];
                 const float dz = zi - cluster.z[j];
 
-                const float r2 = dx*dx + dy*dy + dz*dz + 1e-12f;
-                const float r = std::sqrt(r2);
-                float force = lennardJonesDerivative(r) / r; // TODO merge this, to also hopefully avoid nan / inf
+                const float r2 = dx*dx + dy*dy + dz*dz;
+                float force = fastLJ.force(r2);
                 
                 if (force > 1e10f) force = 1e10f;
                 if (force < -1e10f) force = -1e10f;

@@ -8,35 +8,6 @@
 #include <algorithm>
 
 
-// LJCalculator Implementation
-// ===================================================================================
-inline float LJCalculator::potential(float r2) const {
-    if (r2 < 1e-10f) return std::numeric_limits<float>::infinity();
-
-    const float inv_r2 = 1.0f / r2;
-    const float inv_r6 = inv_r2 * inv_r2 * inv_r2;
-    const float inv_r12 = inv_r6 * inv_r6;
-
-    return inv_r12 - 2.0f * inv_r6;
-}
-
-inline __m256 LJCalculator::potentialAVX(__m256 r2) const {
-    // add small epsilon to all values to avoid division by zero
-    __m256 r2_safe = _mm256_add_ps(r2, EPS);
-    
-    // approximate 1/r2 by rcp + a Newton-Raphson refinement step
-    __m256 inv_r2 = _mm256_rcp_ps(r2_safe);
-    inv_r2 = _mm256_mul_ps(inv_r2, _mm256_fnmadd_ps(r2_safe, inv_r2, TWO));
-    
-    __m256 inv_r4 = _mm256_mul_ps(inv_r2, inv_r2);
-    __m256 inv_r6 = _mm256_mul_ps(inv_r4, inv_r2);
-    __m256 inv_r12 = _mm256_mul_ps(inv_r6, inv_r6);
-    
-    return _mm256_fnmadd_ps(inv_r6, TWO, inv_r12);
-}
-
-
-
 // Cluster Implementation
 // ===================================================================================
 // make the vectors with lengts of a multiple of 8, such that SIMD instructions can be optimally used in getAtomEnergyAVX
