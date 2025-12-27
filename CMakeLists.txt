@@ -4,6 +4,9 @@ project(FuzzyOptimizer VERSION 1.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+find_package(MPI REQUIRED)
+include_directories(${MPI_INCLUDE_PATH})
+
 set(COMMON_SOURCES
     src/FGO.cpp
     src/dataStructures.cpp
@@ -25,7 +28,7 @@ target_compile_options(main PRIVATE
     >
 )
 target_link_options(main PRIVATE -flto -s)
-target_link_libraries(main PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(main PRIVATE ${MPI_CXX_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
 
 # debug build
 add_executable(main_debug src/main.cpp ${COMMON_SOURCES})
@@ -41,4 +44,4 @@ target_compile_options(main_debug PRIVATE
     >
 )
 target_link_options(main_debug PRIVATE -g)
-target_link_libraries(main_debug PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(main_debug PRIVATE ${MPI_CXX_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})

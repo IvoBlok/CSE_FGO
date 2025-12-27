@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <list>
 
+#include <mpi.h>
+
 # define M_PI           3.14159265358979323846  /* pi */
 
 inline float fast_exp(float x)
