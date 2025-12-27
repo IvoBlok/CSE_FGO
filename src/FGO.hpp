@@ -53,7 +53,8 @@ struct SingleRunResult {
 
     // optionally more, to be used for debugging / performance analysis
     std::chrono::microseconds totalTime{0};
-    std::chrono::microseconds dmcTime{0};
+    std::chrono::microseconds dmc1Time{0};
+    std::chrono::microseconds dmc2Time{0};
     std::chrono::microseconds realOptTime{0};
 };
 

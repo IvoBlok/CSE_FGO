@@ -49,11 +49,11 @@ SingleRunResult FuzzyGlobalOptimizer::runSingle(std::mt19937& rng) {
     localDiscreteOptimization(startCandidate.first);
     startCandidate.second = startCandidate.first.getClusterEnergyAVX(fastLJ);
 
-    auto startDMC = std::chrono::high_resolution_clock::now();
+    auto startDMC1 = std::chrono::high_resolution_clock::now();
     runDMCLayer(state, params.dmcLayer1, rng);
-    auto endDMC = std::chrono::high_resolution_clock::now();
-
-    // TODO DMC2
+    auto endDMC1 = std::chrono::high_resolution_clock::now();
+    runDMCLayer(state, params.dmcLayer2, rng);
+    auto endDMC2 = std::chrono::high_resolution_clock::now();
 
     auto startRealOpt = std::chrono::high_resolution_clock::now();
     state.bestIndex = 0; // reset bestIndex, to fix in issue in the rare scenario that the real optimization leads to a worse energy
@@ -82,7 +82,8 @@ SingleRunResult FuzzyGlobalOptimizer::runSingle(std::mt19937& rng) {
     result.candidates = std::move(state.candidates);
     
     result.totalTime = std::chrono::duration_cast<std::chrono::microseconds>(endTotal - startTotal);
-    result.dmcTime = std::chrono::duration_cast<std::chrono::microseconds>(endDMC - startDMC);
+    result.dmc1Time = std::chrono::duration_cast<std::chrono::microseconds>(endDMC1 - startDMC1);
+    result.dmc2Time = std::chrono::duration_cast<std::chrono::microseconds>(endDMC2 - endDMC1);
     result.realOptTime = std::chrono::duration_cast<std::chrono::microseconds>(endRealOpt - startRealOpt);
 
     return result;
@@ -166,7 +167,7 @@ void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMC
         accumulate = 0.f;
         size_t targetAtom = 0;
         for (; targetAtom < params.numberOfAtoms; targetAtom++) {
-            accumulate += activeWeights[targetAtom];
+            accumulate += targetWeights[targetAtom];
             if (uniform <= accumulate) break;
         }
 

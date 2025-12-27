@@ -38,10 +38,13 @@ def extract_plot_data(data):
     for n_result in data.get('allNResults', []):
         n_data = {
             'total': [],
-            'dmc': [],
+            'dmc1': [],
+            'dmc2': [],
             'real_opt': [],
             'other': [],
             'energies': [],
+            'samplesize': None,
+            'correct': None,
             'exact': None
         }
 
@@ -49,21 +52,29 @@ def extract_plot_data(data):
         n = multi_run_result.get('n', 0)
         
         n_data['exact'] = n_result.get('exactSolution')
+        n_data['correct'] = 0
+        n_data['samplesize'] = len(multi_run_result.get('allRuns', []))
 
         for single_run in multi_run_result.get('allRuns', []):
             total = single_run.get('totalTime') / 1e6
-            dmc = single_run.get('dmcTime') / 1e6
+            dmc1 = single_run.get('dmc1Time') / 1e6
+            dmc2 = single_run.get('dmc2Time') / 1e6
             real_opt = single_run.get('realOptTime') / 1e6
 
             n_data['total'].append(total)
-            n_data['dmc'].append(dmc)
+            n_data['dmc1'].append(dmc1)
+            n_data['dmc2'].append(dmc2)
             n_data['real_opt'].append(real_opt)
-            n_data['other'].append(total - (dmc + real_opt))
+            n_data['other'].append(total - (dmc1 + dmc2 + real_opt))
+
+            if (single_run.get('bestEnergy') < n_data['exact'] + 1e-3):
+                n_data['correct'] += 1
 
             for cluster in single_run.get('candidates', []):
                 n_data['energies'].append(cluster[1])
 
-        for key in ['total', 'dmc', 'real_opt', 'other', 'energies']:
+
+        for key in ['total', 'dmc1', 'dmc2', 'real_opt', 'other', 'energies']:
             n_data[key] = np.array(n_data[key])
             
         plot_data[n] = n_data
@@ -74,7 +85,8 @@ def create_timing_plot(ax, plot_data):
     n_values = sorted(plot_data.keys())
 
     total_time = 0
-    dmc_avgs = []
+    dmc1_avgs = []
+    dmc2_avgs = []
     real_opt_avgs = []
     other_avgs = []
 
@@ -82,23 +94,27 @@ def create_timing_plot(ax, plot_data):
         data = plot_data[n]
 
         total_time += np.sum(data['total'])
-        avg_dmc = np.mean(data['dmc'])
+        avg_dmc1 = np.mean(data['dmc1'])
+        avg_dmc2 = np.mean(data['dmc2'])
         avg_real_opt = np.mean(data['real_opt'])
         avg_other = np.mean(data['other'])
 
-        dmc_avgs.append(avg_dmc)
+        dmc1_avgs.append(avg_dmc1)
+        dmc2_avgs.append(avg_dmc2)
         real_opt_avgs.append(avg_real_opt)
         other_avgs.append(avg_other)
 
-    dmc_avgs = np.array(dmc_avgs)
+    dmc1_avgs = np.array(dmc1_avgs)
+    dmc2_avgs = np.array(dmc2_avgs)
     real_opt_avgs = np.array(real_opt_avgs)
     other_avgs = np.array(other_avgs)
 
     x = np.arange(len(n_values))
     width = 0.6
 
-    other_bars = ax.bar(x, real_opt_avgs + dmc_avgs + other_avgs, width, label='Other', color='lightgreen', edgecolor='black')
-    dmc_bars = ax.bar(x, real_opt_avgs + dmc_avgs, width, label='DMC', color='steelblue', edgecolor='black')
+    other_bars = ax.bar(x, real_opt_avgs + dmc1_avgs + dmc2_avgs + other_avgs, width, label='Other', color='lightgreen', edgecolor='black')
+    dmc2_bars = ax.bar(x, real_opt_avgs + dmc1_avgs + dmc2_avgs, width, label='DMC2', color='blue', edgecolor='black')
+    dmc1_bars = ax.bar(x, real_opt_avgs + dmc1_avgs, width, label='DMC1', color='steelblue', edgecolor='black')
     real_opt_bars = ax.bar(x, real_opt_avgs, width, label='realOpt', color='lightcoral', edgecolor='black')
 
     ax.set_xlabel('N')
@@ -117,6 +133,8 @@ def create_energy_boxplot(ax, plot_data):
 
     energy_data = []
     exact_values = []
+    correct_counts = []
+    sample_sizes = []
 
     for n in n_values:
         data = plot_data[n]
@@ -125,6 +143,8 @@ def create_energy_boxplot(ax, plot_data):
 
         energy_data.append(energies)
         exact_values.append(exact)
+        correct_counts.append(data['correct'])
+        sample_sizes.append(data['samplesize'])
 
     x = np.arange(len(n_values))
     box = ax.boxplot(energy_data, positions=x, widths=width, patch_artist=True, whis=[0, 100])
@@ -148,11 +168,17 @@ def create_energy_boxplot(ax, plot_data):
         flier.set_markerfacecolor('red')
         flier.set_markersize(5)
 
-    for i, (n, exact) in enumerate(zip(n_values, exact_values)):
-        if exact is not None:
-            # Draw line across the entire boxplot
-            ax.hlines(y=exact, xmin=i - width/2, xmax=i + width/2, 
-                     color='red', linestyle='--', linewidth=2, alpha=0.7)
+    for i, (n, exact, correct, samplesize) in enumerate(zip(n_values, exact_values, correct_counts, sample_sizes)):
+        ax.hlines(y=exact, xmin=i - width/2, xmax=i + width/2, 
+                    color='red', linestyle='--', linewidth=2, alpha=0.7)
+        
+        
+        ax.text(i, exact - 1, correct, 
+                ha='center', va='top',
+                fontsize=8,
+                color='grey',
+                rotation=0,
+        )
     
     ax.set_ylim([None, 0])
     ax.set_xlabel('N')

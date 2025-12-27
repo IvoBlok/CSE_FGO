@@ -184,7 +184,8 @@ void to_json(json& j, const SingleRunResult& result) {
         {"bestEnergy", result.bestEnergy},
         {"candidates", result.candidates},
         {"totalTime", result.totalTime.count()},
-        {"dmcTime", result.dmcTime.count()},
+        {"dmc1Time", result.dmc1Time.count()},
+        {"dmc2Time", result.dmc2Time.count()},
         {"realOptTime", result.realOptTime.count()}
     };
 }
