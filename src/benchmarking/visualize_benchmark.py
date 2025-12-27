@@ -183,7 +183,7 @@ def create_energy_boxplot(ax, plot_data):
     ax.set_ylim([None, 0])
     ax.set_xlabel('N')
     ax.set_ylabel('Energy [-]')
-    ax.set_title('Energy Distribution of Candidates by N')
+    ax.set_title(f'Energy Distribution of Candidates by N, {sample_sizes[0]} samples')
     ax.set_xticks(x)
     ax.set_xticklabels([str(n) for n in n_values])
     ax.grid(True, alpha=0.3, axis='y')
