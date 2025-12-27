@@ -81,6 +81,44 @@ float Cluster::getClusterEnergyAVX(const LJCalculator& lj) const {
     return total * 0.5f;
 }
 
+void Cluster::getClusterGradient(std::vector<float>& gradX, std::vector<float>& gradY, std::vector<float>& gradZ, const LJCalculator& lj) const {
+    if (gradX.size() < n || gradY.size() < n || gradZ.size() < n)
+        throw std::invalid_argument("given gradient output vectors are of invalid size!");
+    
+    std::fill(gradX.begin(), gradX.end(), 0.0f);
+    std::fill(gradY.begin(), gradY.end(), 0.0f);
+    std::fill(gradZ.begin(), gradZ.end(), 0.0f);
+
+    for (size_t i = 0; i < n; i++)
+    {
+        const float xi = x[i];
+        const float yi = y[i];
+        const float zi = z[i];
+
+        for (size_t j = i + 1; j < n; j++)
+        {
+            const float dx = xi - x[j];
+            const float dy = yi - y[j];
+            const float dz = zi - z[j];
+
+            const float r2 = dx*dx + dy*dy + dz*dz;
+            float force = lj.force(r2);
+            
+            if (force > 1e10f) force = 1e10f;
+            if (force < -1e10f) force = -1e10f;
+
+            gradX[i] += dx * force;
+            gradY[i] += dy * force;
+            gradZ[i] += dz * force;
+
+            gradX[j] -= dx * force;
+            gradY[j] -= dy * force;
+            gradZ[j] -= dz * force;
+        }
+    }
+}
+
+
 void Cluster::copyTo(Cluster& otherCluster) const {
     otherCluster.x = x;
     otherCluster.y = y;

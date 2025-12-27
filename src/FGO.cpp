@@ -214,51 +214,11 @@ void FuzzyGlobalOptimizer::localRealOptimization(std::pair<Cluster, float>& cand
     if (gradCluster1.n != n) gradCluster1 = Cluster(n);
     if (gradCluster2.n != n) gradCluster2 = Cluster(n);
 
-    for (size_t iter = 0; iter < params.maxRealOptimizationIterations; iter++)
+    size_t iter = 0;
+    for (; iter < params.maxRealOptimizationIterations; iter++)
     {
-        // calculate gradient
-        std::fill(gradX.begin(), gradX.end(), 0.0f);
-        std::fill(gradY.begin(), gradY.end(), 0.0f);
-        std::fill(gradZ.begin(), gradZ.end(), 0.0f);
-
-        for (size_t i = 0; i < n; i++)
-        {
-            const float xi = cluster.x[i];
-            const float yi = cluster.y[i];
-            const float zi = cluster.z[i];
-
-            for (size_t j = i + 1; j < n; j++)
-            {
-                const float dx = xi - cluster.x[j];
-                const float dy = yi - cluster.y[j];
-                const float dz = zi - cluster.z[j];
-
-                const float r2 = dx*dx + dy*dy + dz*dz;
-                float force = fastLJ.force(r2);
-                
-                if (force > 1e10f) force = 1e10f;
-                if (force < -1e10f) force = -1e10f;
-
-                gradX[i] += dx * force;
-                gradY[i] += dy * force;
-                gradZ[i] += dz * force;
-
-                gradX[j] -= dx * force;
-                gradY[j] -= dy * force;
-                gradZ[j] -= dz * force;
-            }
-        }
-        // gradient clipping
-        for (size_t i = 0; i < n; ++i) {
-            const float g2 = gradX[i]*gradX[i] + gradY[i]*gradY[i] + gradZ[i]*gradZ[i];
-            if (g2 > 10000.0f) {  // 100^2
-                const float scale = 100.0f / std::sqrt(g2);
-                gradX[i] *= scale;
-                gradY[i] *= scale;
-                gradZ[i] *= scale;
-            }
-        }
-
+        cluster.getClusterGradient(gradX, gradY, gradZ, fastLJ);
+        
         // line search
         for (size_t i = 0; i < n; ++i) {
             gradCluster1.x[i] = cluster.x[i] - gradX[i] * step;
@@ -289,8 +249,9 @@ void FuzzyGlobalOptimizer::localRealOptimization(std::pair<Cluster, float>& cand
 
         // convergence condition
         candidate.second = cluster.getClusterEnergyAVX(fastLJ);
-        if (std::abs(candidate.second - E0) < 1e-6f) break;
+        if (std::abs(candidate.second - E0) < 1e-10f) break;
     }
+    std::cout << iter << "\n";
 }
 
 // helper functions

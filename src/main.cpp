@@ -242,7 +242,6 @@ int main(int argc, char** argv) {
         
         FGOParameters params;
         params.numberOfAtoms = n;
-        params.spawningRadiusFactor = 0.55;
         
         FuzzyGlobalOptimizer optimizer(params);
         

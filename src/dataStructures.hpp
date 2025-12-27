@@ -76,6 +76,8 @@ public:
     float getAtomEnergyAVX(size_t atomIndex, const LJCalculator& lj) const;
     float getClusterEnergyAVX(const LJCalculator& lj) const;
     
+    void getClusterGradient(std::vector<float>& gradX, std::vector<float>& gradY, std::vector<float>& gradZ, const LJCalculator& lj) const;
+
     void copyTo(Cluster& otherCluster) const;
 
     size_t size() const { return n; };
