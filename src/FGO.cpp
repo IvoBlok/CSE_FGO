@@ -214,11 +214,10 @@ void FuzzyGlobalOptimizer::localRealOptimization(std::pair<Cluster, float>& cand
     if (gradCluster1.n != n) gradCluster1 = Cluster(n);
     if (gradCluster2.n != n) gradCluster2 = Cluster(n);
 
-    size_t iter = 0;
-    for (; iter < params.maxRealOptimizationIterations; iter++)
+    for (size_t iter = 0; iter < params.maxRealOptimizationIterations; iter++)
     {
         cluster.getClusterGradient(gradX, gradY, gradZ, fastLJ);
-        
+
         // line search
         for (size_t i = 0; i < n; ++i) {
             gradCluster1.x[i] = cluster.x[i] - gradX[i] * step;
@@ -251,7 +250,6 @@ void FuzzyGlobalOptimizer::localRealOptimization(std::pair<Cluster, float>& cand
         candidate.second = cluster.getClusterEnergyAVX(fastLJ);
         if (std::abs(candidate.second - E0) < 1e-10f) break;
     }
-    std::cout << iter << "\n";
 }
 
 // helper functions
