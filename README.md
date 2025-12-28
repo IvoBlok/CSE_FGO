@@ -16,11 +16,11 @@ Alternatively use the GUI in (sudo) hotspot; Framepoint is probably the nicest m
 
 TODO
 =========
+ - Investigate the lower success percentage compared to the paper results
  - rewrite gradient calculation using SIMD instructions?
- - Try to implement L-BFGS for localRealOptimization; try with stepsize=1, and only half it if the energy drops for the starting stepsize. Fix center of mass. Look into preconditioning
- - parallelization
+ - Try to implement L-BFGS for localRealOptimization; try with stepsize=1, and only half it if the energy drops for the starting stepsize. Fix center of mass. Look into preconditioning for this problem
+ - add results storage to mainMPI; probably only store energies of each candidate etc, and maybe the best cluster for each single run; storing all candidate clusters (x, y, z) makes for massive json files (and memory)
  - In some cases it seemingly gets stuck in some loop somewhere
  - check lookup tables / interpolation methods etc for LJPotential evaluations, since current versions just calculates the potential (very quickly)
  - Write AVX atomEnergy version that uses neighbours
  - Only check energy with neighbours in the localDiscreteFrozenOptimization steps
- - Investigate the lower success percentage compared to the paper results
