@@ -1,4 +1,11 @@
-This project hosts an attempt at implementing the Fuzzy Global Optimization algorithm 'recently' proposed for finding optimal atomic clusters. It is set up for the gcc compiler suite. Additionally, a parallel version of the algorithm is hosted here. The multi-threaded approach is based on MPI, for easy compatability with super/cluster computers.
+This project hosts an attempt at implementing the Fuzzy Global Optimization algorithm proposed for finding optimal atomic clusters in the paper 'Unbiased fuzzy global optimization of
+Lennard-Jones clusters for N <= 1000'. It is set up for the gcc compiler suite. Additionally, a parallel version of the algorithm is hosted here. The multi-threaded approach is based on MPI, for easy compatability with larger computers. Various changes have been made to the strategy proposed by the paper, though many of them were based on limiting the complexity of implementation. The more broad algorithm has not been altered; compromises have only been made for the actual speed. 
+
+Currently the implementation is limited to the first 3 steps from the paper; SMC is left for later. My priority now is to recreate the success rates shown in the paper when only using DMC1 (+DMC2), and hence up to this point I've only been looking at the behaviour for N < 120. 
+
+Though originally the plan was to develop this as part of a minor program , I now work on it as a hobby besides my ongoing masters program on computational science. 
+
+The figures in src/benchmarking are largely for debugging / profiling purposes. The right plot shows the distribution of the collective candidates across all samples at that N, and the number below is the number of samples that came to the global minimum. 
 
 Compiling
 ========
