@@ -112,7 +112,7 @@ void FuzzyGlobalOptimizer::initializeCluster(Cluster& cluster, std::mt19937& rng
     float spawningRadius = params.spawningRadiusFactor * std::pow(params.numberOfAtoms, 0.33f);
 
     for (size_t i = 0; i < params.numberOfAtoms; i++)
-        setPointInSphere(cluster, i, rng, spawningRadius, 0.f, 0.f, 0.f);
+        setPointInBall(cluster, i, rng, spawningRadius, 0.f, 0.f, 0.f);
 }
 
 void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMCParameters& dmcParams, std::mt19937& rng) {
@@ -163,7 +163,7 @@ void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMC
         }
 
         walker.copyTo(proposal);
-        setPointInSphere(proposal, activeAtom, rng, 1.0f, proposal.x[targetAtom], proposal.y[targetAtom], proposal.z[targetAtom], false);
+        setPointInBall(proposal, activeAtom, rng, 1.0f, proposal.x[targetAtom], proposal.y[targetAtom], proposal.z[targetAtom], false);
 
         localDiscreteFrozenOptimization(proposal, activeAtom);
 
@@ -248,7 +248,7 @@ void FuzzyGlobalOptimizer::localRealOptimization(std::pair<Cluster, float>& cand
 }
 
 // helper functions
-void FuzzyGlobalOptimizer::setPointInSphere(Cluster& cluster, size_t index, std::mt19937& rng, float radius, float cx, float cy, float cz, bool allowZero) {
+void FuzzyGlobalOptimizer::setPointInBall(Cluster& cluster, size_t index, std::mt19937& rng, float radius, float cx, float cy, float cz, bool allowZero) {
     // generate random spherical coordinates
     const float u = uniformDist(rng);
     const float r = radius * std::cbrt(u);
@@ -261,10 +261,27 @@ void FuzzyGlobalOptimizer::setPointInSphere(Cluster& cluster, size_t index, std:
     const int dz = static_cast<int>(std::round(r * std::cos(phi) / params.gridSpacing));
 
     if(!allowZero && dx == 0 && dy == 0 && dz == 0) {
-        setPointInSphere(cluster, index, rng, radius, cx, cy, cz, allowZero);
+        setPointInBall(cluster, index, rng, radius, cx, cy, cz, allowZero);
         return;
     }
 
+    cluster.x[index] = cx + dx * params.gridSpacing;
+    cluster.y[index] = cy + dy * params.gridSpacing;
+    cluster.z[index] = cz + dz * params.gridSpacing;
+}
+
+void FuzzyGlobalOptimizer::setPointOnSphere(Cluster& cluster, size_t index, std::mt19937& rng, float radius, float cx, float cy, float cz) {
+    const float theta = thetaDist(rng);
+    const float phi = phiDist(rng);
+
+    const float x = radius * std::sin(phi) * std::cos(theta);
+    const float y = radius * std::sin(phi) * std::sin(theta);
+    const float z = radius * std::cos(phi);
+    
+    const int dx = static_cast<int>(std::round(x / params.gridSpacing));
+    const int dy = static_cast<int>(std::round(y / params.gridSpacing));
+    const int dz = static_cast<int>(std::round(z / params.gridSpacing));
+    
     cluster.x[index] = cx + dx * params.gridSpacing;
     cluster.y[index] = cy + dy * params.gridSpacing;
     cluster.z[index] = cz + dz * params.gridSpacing;

@@ -232,7 +232,7 @@ int main(int argc, char** argv) {
     
     const int NUM_RUNS = 100;
     const int MIN_N = 2;
-    const int MAX_N = 65;
+    const int MAX_N = 40;
     
     for (int n = MIN_N; n <= MAX_N; n++) {
         std::cout << "Testing N = " << n << "..." << std::endl;

@@ -24,3 +24,4 @@ TODO
  - check lookup tables / interpolation methods etc for LJPotential evaluations, since current versions just calculates the potential (very quickly)
  - Write AVX atomEnergy version that uses neighbours
  - Only check energy with neighbours in the localDiscreteFrozenOptimization steps
+ - instead of in DMC moving the active to a random point around the target, try calculating the average direction

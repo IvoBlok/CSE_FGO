@@ -100,7 +100,8 @@ private:
     void localRealOptimization(std::pair<Cluster, float>& candidate);
 
     // helper functions for the main algorithm steps above
-    void setPointInSphere(Cluster& cluster, size_t index, std::mt19937& rng, float radius, float cx, float cy, float cz, bool allowZero = true);
+    void setPointInBall(Cluster& cluster, size_t index, std::mt19937& rng, float radius, float cx, float cy, float cz, bool allowZero = true);
+    void setPointOnSphere(Cluster& cluster, size_t index, std::mt19937& rng, float radius, float cx, float cy, float cz);
 
     size_t localDiscreteFrozenOptimization(Cluster& cluster, const size_t frozenIndex);
 };
