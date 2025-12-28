@@ -2,7 +2,7 @@ import json
 import sys
 import matplotlib.pyplot as plt
 import numpy as np
-import matplotlib.patches as mpatches
+import matplotlib.ticker as ticker
 from matplotlib import rcParams
 import os
 
@@ -109,27 +109,27 @@ def create_timing_plot(ax, plot_data):
     real_opt_avgs = np.array(real_opt_avgs)
     other_avgs = np.array(other_avgs)
 
-    x = np.arange(len(n_values))
     width = 0.6
 
-    other_bars = ax.bar(x, real_opt_avgs + dmc1_avgs + dmc2_avgs + other_avgs, width, label='Other', color='lightgreen', edgecolor='black')
-    dmc2_bars = ax.bar(x, real_opt_avgs + dmc1_avgs + dmc2_avgs, width, label='DMC2', color='blue', edgecolor='black')
-    dmc1_bars = ax.bar(x, real_opt_avgs + dmc1_avgs, width, label='DMC1', color='steelblue', edgecolor='black')
-    real_opt_bars = ax.bar(x, real_opt_avgs, width, label='realOpt', color='lightcoral', edgecolor='black')
+    other_bars = ax.bar(n_values, real_opt_avgs + dmc1_avgs + dmc2_avgs + other_avgs, width, label='Other', color='lightgreen', edgecolor='black')
+    dmc2_bars = ax.bar(n_values, real_opt_avgs + dmc1_avgs + dmc2_avgs, width, label='DMC2', color='blue', edgecolor='black')
+    dmc1_bars = ax.bar(n_values, real_opt_avgs + dmc1_avgs, width, label='DMC1', color='steelblue', edgecolor='black')
+    real_opt_bars = ax.bar(n_values, real_opt_avgs, width, label='realOpt', color='lightcoral', edgecolor='black')
 
     ax.set_xlabel('N')
     ax.set_ylabel('Average time for Single Run [s]')
     ax.set_title(f'Time Breakdown by N, Total: {total_time:.1f}s')
-    ax.set_xticks(x)
-    ax.set_xticklabels([str(n) for n in n_values])
+    
+    ax.xaxis.set_major_locator(ticker.MaxNLocator(nbins=15, integer=True))
+
     ax.legend(loc='upper left')
-    ax.grid(True, alpha=0.3, axis='y')
+    ax.grid(True, alpha=0.3)
 
     return ax
         
 def create_energy_boxplot(ax, plot_data):
     n_values = sorted(plot_data.keys())
-    width = 0.6
+    width = 0.6 * min(np.diff(n_values)) if len(n_values) > 1 else 0.6
 
     energy_data = []
     exact_values = []
@@ -146,8 +146,7 @@ def create_energy_boxplot(ax, plot_data):
         correct_counts.append(data['correct'])
         sample_sizes.append(data['samplesize'])
 
-    x = np.arange(len(n_values))
-    box = ax.boxplot(energy_data, positions=x, widths=width, patch_artist=True, whis=[0, 100])
+    box = ax.boxplot(energy_data, positions=n_values, widths=width, patch_artist=True, whis=[0, 100])
 
     for box_element in box['boxes']:
         box_element.set_facecolor('lightblue')
@@ -168,12 +167,11 @@ def create_energy_boxplot(ax, plot_data):
         flier.set_markerfacecolor('red')
         flier.set_markersize(5)
 
-    for i, (n, exact, correct, samplesize) in enumerate(zip(n_values, exact_values, correct_counts, sample_sizes)):
-        ax.hlines(y=exact, xmin=i - width/2, xmax=i + width/2, 
+    for n, exact, correct, samplesize in zip(n_values, exact_values, correct_counts, sample_sizes):
+        ax.hlines(y=exact, xmin=n - width/2, xmax=n + width/2, 
                     color='red', linestyle='--', linewidth=2, alpha=0.7)
         
-        
-        ax.text(i, exact - 1, correct, 
+        ax.text(n, exact - 1, correct, 
                 ha='center', va='top',
                 fontsize=8,
                 color='grey',
@@ -184,9 +182,18 @@ def create_energy_boxplot(ax, plot_data):
     ax.set_xlabel('N')
     ax.set_ylabel('Energy [-]')
     ax.set_title(f'Energy Distribution of Candidates by N, {sample_sizes[0]} samples')
-    ax.set_xticks(x)
-    ax.set_xticklabels([str(n) for n in n_values])
-    ax.grid(True, alpha=0.3, axis='y')
+    
+    n_values = np.array(n_values)
+    marked_n = np.linspace(np.min(n_values), np.max(n_values), 14, dtype=int)
+    ax.set_xticks(marked_n)
+    ax.set_xticklabels([str(n) for n in marked_n])
+
+    ax.grid(True, alpha=0.3)
+    
+    def format_coord(x, y):
+            closest_n = min(n_values, key=lambda n_val: abs(n_val - x))
+            return f"N={closest_n}, E={y:.1f}"
+    ax.format_coord = format_coord
 
     return ax
     

@@ -96,7 +96,6 @@ MultiRunResult FuzzyGlobalOptimizer::runMultiple(size_t numRuns) {
     MultiRunResult multiResult;
     multiResult.allRuns.reserve(numRuns);
 
-
     for (size_t i = 0; i < numRuns; i++)
     {
         std::mt19937 runRng(std::random_device{}());
@@ -187,7 +186,10 @@ void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMC
         if (deltaAtomEnergy < 0.0f || uniformDist(rng) < fast_exp(-deltaAtomEnergy * dmcParams.invAcceptanceEnergy)) {
             localDiscreteOptimization(proposal);
 
-            float candidateEnergy = proposal.getClusterEnergyAVX(fastLJ);
+            //TODO the cost of this could be removed, by modifying localDiscreteOptimization to keep track of the total sum of changes from improvements in getAtomEnergyAVX
+            // hence after localDiscreteOptimization, we would know how much the discreteOptimization steps (an swap) changed the walker cluster energy, saving us a clusterEnergy call at the cost of some float operations
+            float candidateEnergy = proposal.getClusterEnergyAVX(fastLJ); 
+            
             if(candidateEnergy < state.candidates.back().second) { // the back is guaranteed to be the best
                 state.bestIndex = state.candidates.size();
                 state.candidates.emplace_back(proposal, candidateEnergy);

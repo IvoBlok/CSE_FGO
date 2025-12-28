@@ -19,8 +19,7 @@ TODO
  - Try to implement L-BFGS for localRealOptimization; try with stepsize=1, and only half it if the energy drops for the starting stepsize. Fix center of mass. Look into preconditioning
  - parallelization
  - In some cases it seemingly gets stuck in some loop somewhere
- - check lookup tables / interpolation methods etc for LJPotential evaluations, since current versions just calculate the potential (very quickly)
+ - check lookup tables / interpolation methods etc for LJPotential evaluations, since current versions just calculates the potential (very quickly)
  - Write AVX atomEnergy version that uses neighbours
  - Only check energy with neighbours in the localDiscreteFrozenOptimization steps
- - In a similar vein, in many cases we don't need to calculate clusterPotential from scratch, since generally only 1 or 2 atoms got moved; we just need to calculate the change these moves caused
- - Investigate the drastically lower success percentage compared to the paper results, and compared to the version before the most recent rewrite
+ - Investigate the lower success percentage compared to the paper results
