@@ -230,28 +230,46 @@ void to_json(json& j, const BenchmarkResult& benchmark) {
 int main(int argc, char** argv) {
 
     MPI_Init(&argc, &argv);
-    auto startTime = std::chrono::high_resolution_clock::now();
 
     int rank, totalCores;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &totalCores);
 
-    const int NUM_RUNS = 1000;
-    int localSampleCount = NUM_RUNS / totalCores;
-    int remainder = NUM_RUNS % totalCores;
+    const int NUM_RUNS = 100;
 
-    if (rank < remainder) localSampleCount++;
+    for (size_t n = 0; n < 100; n++)
+    {
+        auto startTime = std::chrono::high_resolution_clock::now();
+        int localSampleCount = NUM_RUNS / totalCores;
+        int remainder = NUM_RUNS % totalCores;
 
-    FGOParameters params;
-    params.numberOfAtoms = 65;
-        
-    FuzzyGlobalOptimizer optimizer(params);
-    auto multiResult = optimizer.runMultiple(localSampleCount);
+        if (rank < remainder) localSampleCount++;
 
-    MPI_Barrier(MPI_COMM_WORLD);
-    auto endTime = std::chrono::high_resolution_clock::now();
-    if (rank == 0) {
-        std::cout << "average wall-clock time per sample for N=" << params.numberOfAtoms << ": " << std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count() / (1e6 * NUM_RUNS) << "s\n";
+        FGOParameters params;
+        params.numberOfAtoms = n;
+
+        FuzzyGlobalOptimizer optimizer(params);
+        auto multiResult = optimizer.runMultiple(localSampleCount);
+
+        int correctFinds = 0;
+        for (const auto& run : multiResult.allRuns) {
+            if (run.bestEnergy < clusterBestEnergies[n] + 1e-3) {
+                correctFinds++;
+            }
+        }
+        int globalSuccessfullFinds = 0;
+        MPI_Reduce(&correctFinds, &globalSuccessfullFinds, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+
+        MPI_Barrier(MPI_COMM_WORLD);
+        auto endTime = std::chrono::high_resolution_clock::now();
+        if (rank == 0) {
+            auto timeSpent = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count() / 1e6;
+            std::cout << "========== " << n << " ==========";
+            std::cout << "Average wall-clock time per sample for N=" << n << ": " << timeSpent / NUM_RUNS << "s\n";
+            std::cout << "Total time spent: " << timeSpent << "s\n";
+            std::cout << "Approximate time required for global minimum: " << timeSpent / globalSuccessfullFinds << "s\n";
+            std::cout << "Found global minimum " << globalSuccessfullFinds << " out of " << NUM_RUNS << " attempts\n";
+        }
     }
 
     MPI_Finalize();
