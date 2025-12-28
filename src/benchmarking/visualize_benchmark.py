@@ -49,7 +49,6 @@ def extract_plot_data(data):
         }
 
         multi_run_result = n_result.get('multiRunResult', {})
-        n = multi_run_result.get('n', 0)
         
         n_data['exact'] = n_result.get('exactSolution')
         n_data['correct'] = 0
@@ -76,7 +75,8 @@ def extract_plot_data(data):
 
         for key in ['total', 'dmc1', 'dmc2', 'real_opt', 'other', 'energies']:
             n_data[key] = np.array(n_data[key])
-            
+        
+        n = n_result.get('n')
         plot_data[n] = n_data
 
     return plot_data

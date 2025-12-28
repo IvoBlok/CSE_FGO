@@ -12,6 +12,7 @@ Cmake is used to handle the build process and dependencies. The single Cmake fil
 PROFILING
 ========
 I now use perf and hotspot. So for example gather data with 'perf record --call-graph dwarf ./main_debug', then run 'hotspot' to get the results.
+Alternatively use the GUI in (sudo) hotspot; Framepoint is probably the nicest mode. 
 
 TODO
 =========

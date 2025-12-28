@@ -8,8 +8,6 @@
 #include <algorithm>
 #include <list>
 
-#include <mpi.h>
-
 # define M_PI           3.14159265358979323846  /* pi */
 
 inline float fast_exp(float x)
@@ -101,21 +99,10 @@ MultiRunResult FuzzyGlobalOptimizer::runMultiple(size_t numRuns) {
         std::mt19937 runRng(std::random_device{}());
         auto singleResult = runSingle(runRng);
         multiResult.allRuns.emplace_back(std::move(singleResult));
-
-        multiResult.totalTime += singleResult.totalTime;
-
-        if (singleResult.bestEnergy < multiResult.globalBestEnergy) {
-            multiResult.globalBestEnergy = singleResult.bestEnergy;
-            multiResult.globalBestCluster = singleResult.bestCluster;
-        }
     }
 
-    if (numRuns > 0)
-        multiResult.averageTime = multiResult.totalTime / numRuns;
-    
     return multiResult;
 }
-
 
 // private functions
 // ===============================================

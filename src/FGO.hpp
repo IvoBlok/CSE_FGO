@@ -59,14 +59,9 @@ struct SingleRunResult {
 };
 
 struct MultiRunResult {
-    Cluster globalBestCluster;
-    float globalBestEnergy = std::numeric_limits<float>::max();
-
     std::vector<SingleRunResult> allRuns;
 
     // optionally more, for debug / performance analysis or just statistics across the runs
-    std::chrono::microseconds totalTime{0};
-    std::chrono::microseconds averageTime{0};
 };
 
 
@@ -96,7 +91,7 @@ public:
     SingleRunResult runSingle(std::mt19937& rng);
     SingleRunResult runSingleWithSeed(uint32_t seed);
 
-    MultiRunResult runMultiple(size_t numRuns = 0);
+    MultiRunResult runMultiple(size_t numRuns);
 
 private: 
     void initializeCluster(Cluster& cluster, std::mt19937& rng);

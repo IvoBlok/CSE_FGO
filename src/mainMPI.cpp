@@ -3,6 +3,8 @@
 
 #include "json.hpp"
 #include "FGO.hpp"
+#include <mpi.h>
+
 
 const float clusterBestEnergies[151] = {
     0.f,  // Placeholder for index 0 (no cluster with 0 atoms)
@@ -226,57 +228,33 @@ void to_json(json& j, const BenchmarkResult& benchmark) {
 
 
 int main(int argc, char** argv) {
+
+    MPI_Init(&argc, &argv);
     auto startTime = std::chrono::high_resolution_clock::now();
-    
-    BenchmarkResult benchmarkResult;
-    
-    const int NUM_RUNS = 100;
-    const int MIN_N = 2;
-    const int MAX_N = 65;
-    
-    for (int n = MIN_N; n <= MAX_N; n++) {
-        std::cout << "Testing N = " << n << "..." << std::endl;
+
+    int rank, totalCores;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &totalCores);
+
+    const int NUM_RUNS = 1000;
+    int localSampleCount = NUM_RUNS / totalCores;
+    int remainder = NUM_RUNS % totalCores;
+
+    if (rank < remainder) localSampleCount++;
+
+    FGOParameters params;
+    params.numberOfAtoms = 65;
         
-        FGOParameters params;
-        params.numberOfAtoms = n;
-        
-        FuzzyGlobalOptimizer optimizer(params);
-        
-        auto multiResult = optimizer.runMultiple(NUM_RUNS);
-        
-        int correctFinds = 0;
-        for (const auto& run : multiResult.allRuns) {
-            if (run.bestEnergy < clusterBestEnergies[n] + 1e-3) {
-                correctFinds++;
-            }
-        }
-        
-        BenchmarkResult::NResult nResult;
-        nResult.multiRunResult = std::move(multiResult);
-        nResult.exactSolution = clusterBestEnergies[n];
-        nResult.n = n;
-        benchmarkResult.allNResults.push_back(nResult);
-        
-        std::cout << "  Success rate: " << correctFinds << "/" << NUM_RUNS << "\n";
-    }
-    
+    FuzzyGlobalOptimizer optimizer(params);
+    auto multiResult = optimizer.runMultiple(localSampleCount);
+
+    MPI_Barrier(MPI_COMM_WORLD);
     auto endTime = std::chrono::high_resolution_clock::now();
-    benchmarkResult.totalBenchmarkTime = 
-        std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);
-    
-    // add timestamp
-    auto now = std::chrono::system_clock::now();
-    auto now_c = std::chrono::system_clock::to_time_t(now);
-    std::ostringstream oss;
-    oss << std::put_time(std::localtime(&now_c), "%Y-%m-%d %H:%M:%S");
-    benchmarkResult.timestamp = oss.str();
-    
-    // save to JSON file
-    json j = benchmarkResult;
-    std::ofstream file("benchmark_results.json");
-    file << j.dump(2);
-    
-    std::cout << "\nBenchmark completed in " << benchmarkResult.totalBenchmarkTime.count() / 1e6 << " seconds\n";
-    std::cout << "Results saved to benchmark_results.json\n";
+    if (rank == 0) {
+        std::cout << "average wall-clock time per sample for N=" << params.numberOfAtoms << ": " << std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count() / (1e6 * NUM_RUNS) << "s\n";
+    }
+
+    MPI_Finalize();
+
     return 0;
 }
