@@ -11,13 +11,13 @@ int main(int argc, char** argv) {
     FuzzyGlobalOptimizer optimizer(params);
 
     auto cluster = DiscreteCluster(params.numberOfAtoms, params.cutoffDistance);
-    for (size_t i = 0; i < 1; i++)
+    for (size_t i = 0; i < 100000; i++)
     {
         std::mt19937 rng(std::random_device{}());
         optimizer.initializeCluster(cluster, rng);
-        std::cout << "start E:" << cluster.getClusterEnergy(params.gridSpacing * params.gridSpacing) << "\n";
         optimizer.localDiscreteOptimization(cluster);
-        std::cout << "end E:" << cluster.getClusterEnergy(params.gridSpacing * params.gridSpacing) << "\n\n";
+
+        std::cout << ".";
     }
     
     return 0;

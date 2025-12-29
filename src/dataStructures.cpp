@@ -15,7 +15,7 @@ DiscreteCluster::DiscreteCluster(const size_t numberOfPoints, const int32_t cuto
 
 float DiscreteCluster::getAtomEnergyAVX(uint64_t atomIndex, const std::vector<uint64_t>& neighbours, const std::vector<float>& lookup) const {
     // neighbours is required to have a multiple of 8 elements, where extra entries can be added by using the same index as that of the main atom.
-    // this implementation does require that in no case we have any two distinct points in the cluster at the same position, which with some different initialization of the starting cluster should be achievable.
+    // this implementation does require that we never have any two distinct points in the cluster at the same position, which with some different initialization of the starting cluster should automatically get enforced.
 
     __m256 energyTotal = _mm256_setzero_ps();
     __m512i atom = _mm512_set1_epi64(*reinterpret_cast<const int64_t*>(&points[4*atomIndex]));
