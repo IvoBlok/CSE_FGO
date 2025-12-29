@@ -18,7 +18,7 @@ struct FGOParameters {
     size_t numberOfAtoms;
 
     float gridSpacing = 0.02f;
-    float discreteCutoffDistance = 2.1f;
+    int32_t cutoffDistance = ((int32_t)(2.1f / gridSpacing));
 
     float gradientStepSize = 0.001f;
 
@@ -74,6 +74,8 @@ private:
     std::uniform_real_distribution<float> thetaDist{0.0f, 2.0f * M_PI};
     std::uniform_real_distribution<float> phiDist{0.0f, M_PI};
 
+    alignas(64) std::vector<float> lookup;
+
     struct RunState {
         std::vector<std::pair<Cluster, float>> candidates;
         size_t bestIndex = 0;
@@ -85,7 +87,6 @@ private:
 
 public:
     explicit FuzzyGlobalOptimizer(const FGOParameters& params);
-    explicit FuzzyGlobalOptimizer(FGOParameters&& params);
 
     SingleRunResult runSingle();
     SingleRunResult runSingle(std::mt19937& rng);
@@ -93,17 +94,17 @@ public:
 
     MultiRunResult runMultiple(size_t numRuns);
 
-private: 
-    void initializeCluster(Cluster& cluster, std::mt19937& rng);
+//private: 
+    void initializeCluster(DiscreteCluster& cluster, std::mt19937& rng);
     void runDMCLayer(RunState& state, const FGOParameters::DMCParameters& dmcParams, std::mt19937& rng);
-    void localDiscreteOptimization(Cluster& cluster);
+    void localDiscreteOptimization(DiscreteCluster& cluster);
     void localRealOptimization(std::pair<Cluster, float>& candidate);
 
     // helper functions for the main algorithm steps above
-    void setPointInBall(Cluster& cluster, size_t index, std::mt19937& rng, float radius, float cx, float cy, float cz, bool allowZero = true);
-    void setPointOnSphere(Cluster& cluster, size_t index, std::mt19937& rng, float radius, float cx, float cy, float cz);
+    void setPointInBall(DiscreteCluster& cluster, int spacingMultiple, size_t index, std::mt19937& rng, float radius, int16_t cx, int16_t cy, int16_t cz, bool allowZero = true);
+    void setPointOnSphere(DiscreteCluster& cluster, int spacingMultiple, size_t index, std::mt19937& rng, float radius, int16_t cx, int16_t cy, int16_t cz);
 
-    size_t localDiscreteFrozenOptimization(Cluster& cluster, const size_t frozenIndex);
+    size_t localDiscreteFrozenOptimization(DiscreteCluster& cluster, const size_t frozenIndex, const std::vector<uint64_t>& neighbours);
 };
 
 #endif // FUZZY_GLOBAL_OPTIMIZER_H

@@ -5,6 +5,7 @@
 #include <array>
 #include <cstddef>
 #include <cmath>
+#include <cstdint>
 #include <immintrin.h>
 
 static inline float horizontalSumAVX(__m256 x) {
@@ -17,6 +18,7 @@ static inline float horizontalSumAVX(__m256 x) {
     // Conversion to float is a no-op on x86-64
     return _mm_cvtss_f32(x32);
 }
+
 
 struct RealLJCalculator {
 private:
@@ -67,16 +69,17 @@ struct DiscreteCluster {
 public:
     alignas(64) std::vector<int16_t> points; // the points are stored like: [x1, y1, z1, 0, x2, y2, z2, 0, ...]
     size_t n;
-private: 
-    size_t nPadded;
+private:
+    __m512i squaredCutoffSIMD;
 
 public:
-    DiscreteCluster() = default;
-    explicit DiscreteCluster(const size_t numberOfPoints);  
+    explicit DiscreteCluster(const size_t numberOfPoints, const int32_t cutoffSIMD);  
 
-    //TODO
+    float getAtomEnergyAVX(uint64_t atomIndex, const std::vector<uint64_t>& neighbours, const std::vector<float>& lookup) const;
+    float getClusterEnergy(float gridSpacingSquared) const;
 
-    float getAtomEnergyAVX(uint64_t atomIndex, const std::vector<uint64_t> neighbours, const std::vector<float> lookup);
+    std::vector<uint64_t> getNeighbours(uint64_t atomIndex, uint32_t squaredCutoff) const;
+    bool doesPointOverlap(uint64_t atomIndex, uint64_t maxIncludedIndex) const;
 };
 
 struct Cluster {

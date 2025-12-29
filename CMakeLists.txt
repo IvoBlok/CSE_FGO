@@ -4,9 +4,6 @@ project(FuzzyOptimizer VERSION 1.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(MPI REQUIRED)
-include_directories(${MPI_INCLUDE_PATH})
-
 set(COMMON_SOURCES
     src/FGO.cpp
     src/dataStructures.cpp
@@ -18,43 +15,30 @@ target_compile_options(main PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:
         -O3
         -march=native
+        -mavx512f
+        -mavx512vl
+        -mavx512bw
+        -mavx512dq
         -mavx2
         -mfma
-        -ffast-math
         -funroll-loops
-        -flto
         -fno-math-errno
-        -fassociative-math
     >
 )
 target_link_options(main PRIVATE -flto -s)
 target_link_libraries(main PRIVATE ${CMAKE_THREAD_LIBS_INIT})
 
-# main MPI (parallel performance) build
-add_executable(mainMPI src/mainMPI.cpp ${COMMON_SOURCES})
-target_compile_options(mainMPI PRIVATE
-    $<$<COMPILE_LANGUAGE:CXX>:
-        -O3
-        -march=native
-        -mavx2
-        -mfma
-        -ffast-math
-        -funroll-loops
-        -flto
-        -fno-math-errno
-        -fassociative-math
-    >
-)
-target_link_options(mainMPI PRIVATE -flto -s)
-target_link_libraries(mainMPI PRIVATE ${MPI_CXX_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
-
 # debug build
 add_executable(main_debug src/main.cpp ${COMMON_SOURCES})
 target_compile_options(main_debug PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:
-        -Og
+        -O0
         -g3
         -march=native
+        -mavx512f
+        -mavx512vl
+        -mavx512bw
+        -mavx512dq
         -mavx2
         -mfma
         -fno-omit-frame-pointer
