@@ -7,6 +7,36 @@
 #include <random>
 #include <algorithm>
 
+// DiscreteCluster Implementation
+// ===================================================================================
+float DiscreteCluster::getAtomEnergyAVX(uint64_t atomIndex, const std::vector<uint64_t> neighbours, const std::vector<float> lookup) {
+    // points, neighbours is required to have a multiple of 8 elements
+
+    __m256 energyTotal = _mm256_setzero_ps();
+    __m512i atom = _mm512_set1_epi64(points[atomIndex]); // broadcast main atom
+
+    for (size_t i = 0; i < neighbours.size(); i+=8)
+    {
+        __m512i indices = _mm512_load_epi64(&neighbours[i]);
+        __m512i neighbours = _mm512_i64gather_epi64(indices, points.data(), 8);
+
+        __m512i diff = _mm512_sub_epi16(atom, neighbours);
+        __m512i squaredXY = _mm512_madd_epi16(diff, diff);
+
+        __m512i shiftedLeft = _mm512_alignr_epi32(squaredXY, squaredXY, 1);
+        __m512i squaredDistances = _mm512_add_epi32(squaredXY, shiftedLeft);
+
+        squaredDistances = _mm512_maskz_mov_epi32(0xAAAA, squaredDistances); // set every second element to zero
+        squaredDistances = _mm512_cvtepu32_epi64(_mm512_castsi512_si256(squaredDistances)); //TODO this should be avoidable, if we make slight changes above; This is only needed because we first have 32 bits of usefull stuff, then 32 bit of zeros. Instead we need it switched around
+        
+        __m256 energies = _mm512_i64gather_ps(squaredDistances, lookup.data(), 4);
+        energyTotal = _mm256_add_ps(energyTotal, energies);
+    }
+
+    return horizontalSumAVX(energyTotal);
+}
+
+
 
 // Cluster Implementation
 // ===================================================================================
@@ -26,7 +56,7 @@ float Cluster::getDistanceSquared(const size_t atomIndex1, const size_t atomInde
     return dx*dx + dy*dy + dz*dz;
 }
 
-float Cluster::getAtomEnergyAVX(size_t atomIndex, const LJCalculator& lj) const {
+float Cluster::getAtomEnergyAVX(size_t atomIndex, const RealLJCalculator& lj) const {
     alignas(32) float energiesArr[8];
 
     __m256 totalVec = _mm256_setzero_ps();
@@ -72,7 +102,7 @@ float Cluster::getAtomEnergyAVX(size_t atomIndex, const LJCalculator& lj) const 
     return horizontalSumAVX(totalVec);
 };
 
-float Cluster::getClusterEnergyAVX(const LJCalculator& lj) const {
+float Cluster::getClusterEnergyAVX(const RealLJCalculator& lj) const {
     float total = 0.f;
 
     for (size_t i = 0; i < n; i++)
@@ -81,7 +111,7 @@ float Cluster::getClusterEnergyAVX(const LJCalculator& lj) const {
     return total * 0.5f;
 }
 
-void Cluster::getClusterGradient(std::vector<float>& gradX, std::vector<float>& gradY, std::vector<float>& gradZ, const LJCalculator& lj) const {
+void Cluster::getClusterGradient(std::vector<float>& gradX, std::vector<float>& gradY, std::vector<float>& gradZ, const RealLJCalculator& lj) const {
     if (gradX.size() < n || gradY.size() < n || gradZ.size() < n)
         throw std::invalid_argument("given gradient output vectors are of invalid size!");
     
@@ -125,25 +155,4 @@ void Cluster::copyTo(Cluster& otherCluster) const {
     otherCluster.z = z;
     otherCluster.n = n;
     otherCluster.nPadded = nPadded;
-}
-
-float Cluster::horizontalSumAVX(__m256 vals) {
-    // sum the last half on the first half
-    __m128 vLow = _mm256_castps256_ps128(vals);
-    __m128 vHigh = _mm256_extractf128_ps(vals, 1);
-    vLow = _mm_add_ps(vLow, vHigh);
-
-    // vLow: [x0, x1, x2, x3]
-    // shuf: [x1, x1, x3, x3]
-    // sums: [x0 + x1, 2 x1, x2 + x3, 2 x3]
-    __m128 shuf = _mm_movehdup_ps(vLow);
-    __m128 sums = _mm_add_ps(vLow, shuf);
-
-    // shuf: [ x2 + x3, 2 x3, x3, x3]
-    shuf = _mm_movehl_ps(shuf, sums);
-    // sums: [x0 + x1 + x2 + x3, ...]
-    sums = _mm_add_ss(sums, shuf);
-
-    // return the first value of sums
-    return _mm_cvtss_f32(sums);
 }

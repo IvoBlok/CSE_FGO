@@ -41,7 +41,7 @@ struct FGOParameters {
 
     float spawningRadiusFactor = 0.4f;
 
-    size_t maxRealOptimizationIterations = 1000;
+    size_t maxRealOptimizationIterations = 2000;
     float realOptimizationTolerance = 1e-6f;
 };
 
@@ -81,7 +81,7 @@ private:
         Cluster DMCWalker;
     };
 
-    LJCalculator fastLJ;
+    RealLJCalculator fastLJ;
 
 public:
     explicit FuzzyGlobalOptimizer(const FGOParameters& params);

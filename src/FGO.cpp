@@ -243,7 +243,7 @@ void FuzzyGlobalOptimizer::localRealOptimization(std::pair<Cluster, float>& cand
 
         // convergence condition
         candidate.second = cluster.getClusterEnergyAVX(fastLJ);
-        if (std::abs(candidate.second - E0) < 1e-10f) break;
+        if (std::abs(candidate.second - E0) < 1e-12f) break;
     }
 }
 
