@@ -23,6 +23,8 @@ Alternatively use the GUI in (sudo) hotspot; Framepoint is probably the nicest m
 
 TODO
 =========
+ - the discrete-continuous implementation here differs drastically in performance from the fully continuous version this branched off from; Why is this?
+ - sometimes the localRealOptimization method moves a cluster with good energy, to pretty much exactly E=0. That might also be why the boxplots so far have very often had random peaks up to the zero line
  - the spawningRadius seems to matter quite a bit for how many DMC candidates get generated; for larger N (20+), with standard (/small) spawningRadius, the first local optimization often results in a quite shit cluster (E >> 0). DMC then only manages to create maybe 2-5 clusters, with also pretty shit E. local real optimization then suddenly optimizes those from say E=100, to E=-30; an absurd improvement relative to its behaviour for smaller N, where it causes an improvement in the range [0, 4] with in most cases it being closer to 0.
  - Investigate the lower success percentage compared to the paper results
  - localDiscreteFrozenOptimization can probably be sped up further; only the freeAtom moves around; so getAtomEnergy() could keep the same neighbour points data loaded, only updating the broadcasted freeAtom

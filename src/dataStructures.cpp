@@ -294,7 +294,6 @@ void Cluster::getClusterGradient(std::vector<float>& gradX, std::vector<float>& 
     }
 }
 
-
 void Cluster::copyTo(Cluster& otherCluster) const {
     otherCluster.x = x;
     otherCluster.y = y;

@@ -47,10 +47,8 @@ struct FGOParameters {
 };
 
 struct SingleRunResult {
-    Cluster bestCluster;
-    float bestEnergy = std::numeric_limits<float>::max();
-
-    std::vector<std::pair<Cluster, float>> candidates;
+    std::vector<std::pair<DiscreteCluster, float>> discCandidates;
+    std::vector<std::pair<Cluster, float>> contCandidates;
 
     // optionally more, to be used for debugging / performance analysis
     std::chrono::microseconds totalTime{0};

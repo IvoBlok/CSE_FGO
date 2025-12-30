@@ -50,6 +50,8 @@ SingleRunResult FuzzyGlobalOptimizer::runSingleWithSeed(uint32_t seed) {
 }
 
 SingleRunResult FuzzyGlobalOptimizer::runSingle(std::mt19937& rng) {
+    auto startTotal = std::chrono::high_resolution_clock::now();
+
     RunState state;
     auto& startCandidate = state.discCandidates.emplace_back(DiscreteCluster(), std::numeric_limits<float>::infinity());
 
@@ -61,14 +63,18 @@ SingleRunResult FuzzyGlobalOptimizer::runSingle(std::mt19937& rng) {
     //DEBUG std::cout << "SLO found: " << startCandidate.second << "\n";
 
     // step 2
+    auto startDMC1 = std::chrono::high_resolution_clock::now();
     state.DMCWalker = startCandidate.first;
     //DEBUG std::cout << "=== DMC1 ===\n";
     runDMCLayer(state, params.dmcLayer1, rng);
+    auto endDMC1 = std::chrono::high_resolution_clock::now();
     //DEBUG std::cout << "=== DMC2 ===\n";
     runDMCLayer(state, params.dmcLayer2, rng);
-    
+    auto endDMC2 = std::chrono::high_resolution_clock::now();
+
     // step 3
     //DEBUG std::cout << "=== LRO ===\n";
+    auto startRealOpt = std::chrono::high_resolution_clock::now();
     for (const auto& candidate : state.discCandidates)
     {
         if (candidate.second < state.discCandidates.back().second + 2.0f) {
@@ -78,12 +84,22 @@ SingleRunResult FuzzyGlobalOptimizer::runSingle(std::mt19937& rng) {
             //DEBUG std::cout << "disc->cont: " << candidate.second << " => " << state.contCandidates.back().second << "\n";
         }
     }
-    
-
+    auto endRealOpt = std::chrono::high_resolution_clock::now();
 
     //TODO
 
-    return SingleRunResult{};
+    auto endTotal = std::chrono::high_resolution_clock::now();
+
+    SingleRunResult result;
+    result.discCandidates = std::move(state.discCandidates);
+    result.contCandidates = std::move(state.contCandidates);
+
+    result.totalTime = std::chrono::duration_cast<std::chrono::microseconds>(endTotal - startTotal);
+    result.dmc1Time = std::chrono::duration_cast<std::chrono::microseconds>(endDMC1 - startDMC1);
+    result.dmc2Time = std::chrono::duration_cast<std::chrono::microseconds>(endDMC2 - endDMC1);
+    result.realOptTime = std::chrono::duration_cast<std::chrono::microseconds>(endRealOpt - startRealOpt);
+
+    return result;
 }
 
 MultiRunResult FuzzyGlobalOptimizer::runMultiple(size_t numRuns) {
