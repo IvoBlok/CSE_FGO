@@ -42,6 +42,7 @@ def extract_plot_data(data):
             'dmc2': [],
             'real_opt': [],
             'other': [],
+            'start_energies': [],
             'energies': [],
             'samplesize': None,
             'correct': None,
@@ -69,11 +70,16 @@ def extract_plot_data(data):
             if (single_run.get('bestEnergy') < n_data['exact'] + 1e-3):
                 n_data['correct'] += 1
 
+            index = 0
             for cluster in single_run.get('candidates', []):
-                n_data['energies'].append(cluster[1])
+                if (index == 0):
+                    n_data['start_energies'].append(cluster[1])
+                else:
+                    n_data['energies'].append(cluster[1])
+                index += 1
 
 
-        for key in ['total', 'dmc1', 'dmc2', 'real_opt', 'other', 'energies']:
+        for key in ['total', 'dmc1', 'dmc2', 'real_opt', 'other', 'energies', 'start_energies']:
             n_data[key] = np.array(n_data[key])
         
         n = n_result.get('n')
@@ -132,6 +138,7 @@ def create_energy_boxplot(ax, plot_data):
     width = 0.6 * min(np.diff(n_values)) if len(n_values) > 1 else 0.6
 
     energy_data = []
+    start_energy_data = []
     exact_values = []
     correct_counts = []
     sample_sizes = []
@@ -139,8 +146,10 @@ def create_energy_boxplot(ax, plot_data):
     for n in n_values:
         data = plot_data[n]
         energies = data['energies']
+        start_energies = data['start_energies']
         exact = data['exact']
 
+        start_energy_data.append(start_energies)
         energy_data.append(energies)
         exact_values.append(exact)
         correct_counts.append(data['correct'])
@@ -167,7 +176,7 @@ def create_energy_boxplot(ax, plot_data):
         flier.set_markerfacecolor('red')
         flier.set_markersize(5)
 
-    for n, exact, correct, samplesize in zip(n_values, exact_values, correct_counts, sample_sizes):
+    for n, starts, exact, correct, samplesize in zip(n_values, start_energy_data, exact_values, correct_counts, sample_sizes):
         ax.hlines(y=exact, xmin=n - width/2, xmax=n + width/2, 
                     color='red', linestyle='--', linewidth=2, alpha=0.7)
         
@@ -177,8 +186,13 @@ def create_energy_boxplot(ax, plot_data):
                 color='grey',
                 rotation=-90,
         )
-    
-    ax.set_ylim([None, 0])
+
+        for start in starts:
+            ax.hlines(y=start, xmin=n - width/2, xmax=n + width/2, 
+                        color='green', linestyle='--', linewidth=2, alpha=0.7)
+            
+    exact_values = np.array(exact_values)
+    ax.set_ylim([np.min(exact) * 1.05, 1e4])
     ax.set_xlabel('N')
     ax.set_ylabel('Energy [-]')
     ax.set_title(f'Energy Distribution of Candidates by N, {sample_sizes[0]} samples')

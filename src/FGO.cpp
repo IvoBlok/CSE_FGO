@@ -58,7 +58,7 @@ SingleRunResult FuzzyGlobalOptimizer::runSingle(std::mt19937& rng) {
 
     auto startRealOpt = std::chrono::high_resolution_clock::now();
     state.bestIndex = 0; // reset bestIndex, to fix in issue in the rare scenario that the real optimization leads to a worse energy
-    for (size_t i = 0; i < state.candidates.size(); i++)
+    for (size_t i = 1; i < state.candidates.size(); i++) // TEMP: starting from i=1, so that the cluster from step 1 stays unmodified; useful for visualization
     {
         auto& candidate = state.candidates[i];
 
