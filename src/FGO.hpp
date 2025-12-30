@@ -18,6 +18,7 @@ struct FGOParameters {
     size_t numberOfAtoms;
 
     float gridSpacing = 0.02f;
+    float gridSpacingSquared = gridSpacing * gridSpacing;
     int32_t cutoffDistance = ((int32_t)(2.1f / gridSpacing));
 
     float gradientStepSize = 0.001f;
@@ -77,10 +78,10 @@ private:
     alignas(64) std::vector<float> lookup;
 
     struct RunState {
-        std::vector<std::pair<Cluster, float>> candidates;
-        size_t bestIndex = 0;
+        std::vector<std::pair<DiscreteCluster, float>> discreteCandidates;
+        size_t bestDistcrete = 0;
 
-        Cluster DMCWalker;
+        DiscreteCluster DMCWalker;
     };
 
     RealLJCalculator fastLJ;

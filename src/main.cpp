@@ -16,8 +16,6 @@ int main(int argc, char** argv) {
         std::mt19937 rng(std::random_device{}());
         optimizer.initializeCluster(cluster, rng);
         optimizer.localDiscreteOptimization(cluster);
-
-        std::cout << ".";
     }
     
     return 0;

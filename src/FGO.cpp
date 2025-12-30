@@ -40,8 +40,6 @@ FuzzyGlobalOptimizer::FuzzyGlobalOptimizer(const FGOParameters& params)
     }
 }
 
-
-
 SingleRunResult FuzzyGlobalOptimizer::runSingle() {
     return runSingle(rng);
 }
@@ -52,57 +50,23 @@ SingleRunResult FuzzyGlobalOptimizer::runSingleWithSeed(uint32_t seed) {
 }
 
 SingleRunResult FuzzyGlobalOptimizer::runSingle(std::mt19937& rng) {
-    /*
     RunState state;
+    auto& startCandidate = state.discreteCandidates.emplace_back(DiscreteCluster(), std::numeric_limits<float>::infinity());
 
-    auto startTotal = std::chrono::high_resolution_clock::now();
-
-    auto& startCandidate = state.candidates.emplace_back(Cluster(), std::numeric_limits<float>::infinity());
-
+    // step 1 (from paper)
+    state.DMCWalker = state.discreteCandidates.front().first;
     initializeCluster(startCandidate.first, rng);
     localDiscreteOptimization(startCandidate.first);
-    startCandidate.second = startCandidate.first.getClusterEnergyAVX(fastLJ);
+    startCandidate.second = startCandidate.first.getClusterEnergy(params.gridSpacingSquared);
 
-    auto startDMC1 = std::chrono::high_resolution_clock::now();
+    // step 2
     state.DMCWalker = startCandidate.first;
     runDMCLayer(state, params.dmcLayer1, rng);
-    auto endDMC1 = std::chrono::high_resolution_clock::now();
     runDMCLayer(state, params.dmcLayer2, rng);
-    auto endDMC2 = std::chrono::high_resolution_clock::now();
-
-    auto startRealOpt = std::chrono::high_resolution_clock::now();
-    state.bestIndex = 0; // reset bestIndex, to fix in issue in the rare scenario that the real optimization leads to a worse energy
-    for (size_t i = 0; i < state.candidates.size(); i++)
-    {
-        auto& candidate = state.candidates[i];
-
-        if (candidate.second < state.candidates[state.bestIndex].second + 2.0f) {
-            localRealOptimization(candidate);
-
-            if (candidate.second < state.candidates[state.bestIndex].second)
-                state.bestIndex = i;
-        }
-    }
-    auto endRealOpt = std::chrono::high_resolution_clock::now();
-
-    // TODO SMC
-
-    // TODO local real optimization of best continuous clusters
-
-    auto endTotal = std::chrono::high_resolution_clock::now();
-
-    SingleRunResult result;
-    result.bestCluster = state.candidates[state.bestIndex].first;
-    result.bestEnergy = state.candidates[state.bestIndex].second;
-    result.candidates = std::move(state.candidates);
     
-    result.totalTime = std::chrono::duration_cast<std::chrono::microseconds>(endTotal - startTotal);
-    result.dmc1Time = std::chrono::duration_cast<std::chrono::microseconds>(endDMC1 - startDMC1);
-    result.dmc2Time = std::chrono::duration_cast<std::chrono::microseconds>(endDMC2 - endDMC1);
-    result.realOptTime = std::chrono::duration_cast<std::chrono::microseconds>(endRealOpt - startRealOpt);
+    //TODO
 
-    return result;
-    */
+    return SingleRunResult{};
 }
 
 MultiRunResult FuzzyGlobalOptimizer::runMultiple(size_t numRuns) {
@@ -135,12 +99,11 @@ void FuzzyGlobalOptimizer::initializeCluster(DiscreteCluster& cluster, std::mt19
     }
 }
 
-/*
 void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMCParameters& dmcParams, std::mt19937& rng) {
     size_t stepsSinceImprovement = 0;
     
-    Cluster proposal{params.numberOfAtoms};
-    Cluster& walker = state.DMCWalker;
+    DiscreteCluster proposal{params.numberOfAtoms, params.cutoffDistance};
+    DiscreteCluster& walker = state.DMCWalker;
 
     std::vector<float> atomEnergies(params.numberOfAtoms);
     std::vector<float> activeWeights(params.numberOfAtoms);
@@ -152,7 +115,7 @@ void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMC
         float sumActive = 0.f, sumTarget = 0.f;
         for (size_t i = 0; i < params.numberOfAtoms; i++)
         {
-            const float E = walker.getAtomEnergyAVX(i, fastLJ);
+            const float E = walker.getAtomEnergyAVX(i); // how are we gonna do neighbours here? 
             atomEnergies[i] = E;
             
             const float wa = fast_exp(E * dmcParams.invActiveEnergy);
@@ -184,11 +147,11 @@ void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMC
         }
 
         walker.copyTo(proposal);
-        setPointInBall(proposal, activeAtom, rng, 1.0f, proposal.x[targetAtom], proposal.y[targetAtom], proposal.z[targetAtom], false);
+        setPointInBall(proposal, 1, activeAtom, rng, 1.0f, proposal.points[4*targetAtom], proposal.points[4*targetAtom+1], proposal.points[4*targetAtom+2], false); // TODO somehow this should not put the point 1 next to any of the existing points
 
         localDiscreteFrozenOptimization(proposal, activeAtom);
 
-        float deltaAtomEnergy = proposal.getAtomEnergyAVX(activeAtom, fastLJ) - atomEnergies[activeAtom];
+        float deltaAtomEnergy = proposal.getAtomEnergyAVX(activeAtom) - atomEnergies[activeAtom];
 
         stepsSinceImprovement++;
         if (deltaAtomEnergy < 0.0f || uniformDist(rng) < fast_exp(-deltaAtomEnergy * dmcParams.invAcceptanceEnergy)) {
@@ -196,18 +159,18 @@ void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMC
 
             //TODO the cost of this could be removed, by modifying localDiscreteOptimization to keep track of the total sum of changes from improvements in getAtomEnergyAVX
             // hence after localDiscreteOptimization, we would know how much the discreteOptimization steps (an swap) changed the walker cluster energy, saving us a clusterEnergy call at the cost of some float operations
-            float candidateEnergy = proposal.getClusterEnergyAVX(fastLJ); 
+            float candidateEnergy = proposal.getClusterEnergy(params.gridSpacingSquared); 
             
-            if(candidateEnergy < state.candidates.back().second) { // the back is guaranteed to be the best
-                state.bestIndex = state.candidates.size();
-                state.candidates.emplace_back(proposal, candidateEnergy);
+            if(candidateEnergy < state.discreteCandidates.back().second) { // the back is guaranteed to be the best
+                state.bestDistcrete = state.discreteCandidates.size();
+                state.discreteCandidates.emplace_back(proposal, candidateEnergy);
                 stepsSinceImprovement = 0;
             }
             walker = proposal; // copy data from proposal into walker, regardless of if proposal is a new best
         }
     }
 }
-*/
+
 void FuzzyGlobalOptimizer::localDiscreteOptimization(DiscreteCluster& cluster) {
     std::list<size_t> activeList;
     alignas(64) std::vector<std::vector<uint64_t>> neighbourLists;

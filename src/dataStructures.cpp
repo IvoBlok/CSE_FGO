@@ -11,6 +11,8 @@
 
 // DiscreteCluster Implementation
 // ===================================================================================
+DiscreteCluster::DiscreteCluster() : n(0), squaredCutoffSIMD(_mm512_setzero_si512()) {}
+
 DiscreteCluster::DiscreteCluster(const size_t numberOfPoints, const int32_t cutoffSIMD) : points(4*numberOfPoints), n(numberOfPoints), squaredCutoffSIMD(_mm512_set1_epi32(cutoffSIMD * cutoffSIMD)) {}
 
 float DiscreteCluster::getAtomEnergyAVX(uint64_t atomIndex, const std::vector<uint64_t>& neighbours, const std::vector<float>& lookup) const {
@@ -44,6 +46,19 @@ float DiscreteCluster::getAtomEnergyAVX(uint64_t atomIndex, const std::vector<ui
 
     return horizontalSumAVX(energyTotal);
 }
+
+float DiscreteCluster::getAtomEnergyAVX(uint64_t atomIndex) const {
+    __m256 energyTotal = _mm256_setzero_ps();
+    __m512i atom = _mm512_set1_epi64(*reinterpret_cast<const int64_t*>(&points[4*atomIndex]));
+
+    //TODO 
+    for (size_t i = 0; i < count; i++)
+    {
+        //__m512i points 
+    }
+    
+}
+
 
 float DiscreteCluster::getClusterEnergy(float gridSpacingSquared) const {
     //TODO slow? basic (exact) implementation to get cluster energy. 
