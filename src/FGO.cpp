@@ -124,12 +124,19 @@ void FuzzyGlobalOptimizer::initializeCluster(DiscreteCluster& cluster, std::mt19
 
     float spawningRadius = params.spawningRadiusFactor * std::pow(params.numberOfAtoms, 0.33f);
 
-    setPointInBall(cluster, 1, 0, rng, spawningRadius, 0, 0, 0);
+    for (size_t i = 0; i < params.numberOfAtoms; i++)
+    {
+        setPointInBall(cluster, i, rng, spawningRadius, 0, 0, 0);
+    }
+    
+    /*  
+    setPointInBall(cluster, 0, rng, spawningRadius, 0, 0, 0);
     for (size_t i = 1; i < params.numberOfAtoms; i++) {
         do {
-            setPointInBall(cluster, 1, i, rng, spawningRadius, 0, 0, 0);
+            setPointInBall(cluster, i, rng, spawningRadius, 0, 0, 0);
         } while (cluster.doesPointOverlap(i, i-1));
     }
+    */
 }
 
 void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMCParameters& dmcParams, std::mt19937& rng) {
@@ -180,7 +187,7 @@ void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMC
         }
 
         walker.copyTo(proposal);
-        setPointInBall(proposal, 1, activeAtom, rng, 1.0f, proposal.points[4*targetAtom], proposal.points[4*targetAtom+1], proposal.points[4*targetAtom+2]);
+        setPointInBall(proposal, activeAtom, rng, 1.0f, proposal.points[4*targetAtom], proposal.points[4*targetAtom+1], proposal.points[4*targetAtom+2]);
 
         localDiscreteFrozenOptimization(proposal, activeAtom);
 
@@ -271,7 +278,7 @@ void FuzzyGlobalOptimizer::localRealOptimization(std::pair<Cluster, float>& cand
 }
 
 // helper functions
-void FuzzyGlobalOptimizer::setPointInBall(DiscreteCluster& cluster, int spacingMultiple, size_t index, std::mt19937& rng, float radius, int16_t cx, int16_t cy, int16_t cz, bool allowZero) {
+void FuzzyGlobalOptimizer::setPointInBall(DiscreteCluster& cluster, size_t index, std::mt19937& rng, float radius, int16_t cx, int16_t cy, int16_t cz, bool allowZero) {
     // generate random spherical coordinates
     const float u = uniformDist(rng);
     const float r = radius * std::cbrt(u);
@@ -279,12 +286,12 @@ void FuzzyGlobalOptimizer::setPointInBall(DiscreteCluster& cluster, int spacingM
     const float phi = phiDist(rng);
 
     // convert to cartesian coordinates    
-    const int dx = static_cast<int>(std::round(r * std::sin(phi) * std::cos(theta) / (spacingMultiple * params.gridSpacing))) * spacingMultiple;
-    const int dy = static_cast<int>(std::round(r * std::sin(phi) * std::sin(theta) / (spacingMultiple * params.gridSpacing))) * spacingMultiple;
-    const int dz = static_cast<int>(std::round(r * std::cos(phi) / (spacingMultiple * params.gridSpacing))) * spacingMultiple;
+    const int dx = static_cast<int>(std::round(r * std::sin(phi) * std::cos(theta) / params.gridSpacing));
+    const int dy = static_cast<int>(std::round(r * std::sin(phi) * std::sin(theta) / params.gridSpacing));
+    const int dz = static_cast<int>(std::round(r * std::cos(phi) / params.gridSpacing));
 
     if(!allowZero && dx == 0 && dy == 0 && dz == 0) {
-        setPointInBall(cluster, spacingMultiple, index, rng, radius, cx, cy, cz, false);
+        setPointInBall(cluster, index, rng, radius, cx, cy, cz, false);
         return;
     }
 
@@ -293,7 +300,7 @@ void FuzzyGlobalOptimizer::setPointInBall(DiscreteCluster& cluster, int spacingM
     cluster.points[4*index+2] = cz + dz;
 }
 
-void FuzzyGlobalOptimizer::setPointOnSphere(DiscreteCluster& cluster, int spacingMultiple, size_t index, std::mt19937& rng, float radius, int16_t cx, int16_t cy, int16_t cz) {
+void FuzzyGlobalOptimizer::setPointOnSphere(DiscreteCluster& cluster, size_t index, std::mt19937& rng, float radius, int16_t cx, int16_t cy, int16_t cz) {
     const float theta = thetaDist(rng);
     const float phi = phiDist(rng);
 
@@ -301,9 +308,9 @@ void FuzzyGlobalOptimizer::setPointOnSphere(DiscreteCluster& cluster, int spacin
     const float y = radius * std::sin(phi) * std::sin(theta);
     const float z = radius * std::cos(phi);
     
-    const int16_t dx = static_cast<int16_t>(std::round(x / (spacingMultiple * params.gridSpacing))) * spacingMultiple;
-    const int16_t dy = static_cast<int16_t>(std::round(y / (spacingMultiple * params.gridSpacing))) * spacingMultiple;
-    const int16_t dz = static_cast<int16_t>(std::round(z / (spacingMultiple * params.gridSpacing))) * spacingMultiple;
+    const int16_t dx = static_cast<int16_t>(std::round(x / params.gridSpacing));
+    const int16_t dy = static_cast<int16_t>(std::round(y / params.gridSpacing));
+    const int16_t dz = static_cast<int16_t>(std::round(z / params.gridSpacing));
     
     cluster.points[4*index+0] = cx + dx;
     cluster.points[4*index+1] = cy + dy;
