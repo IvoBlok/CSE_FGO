@@ -28,9 +28,7 @@ float DiscreteCluster::getAtomEnergyAVX(uint64_t atomIndex, const std::pair<std:
     __m256 lastEnergies = _mm256_setzero_ps();
     __m512i atom = _mm512_set1_epi64(*reinterpret_cast<const int64_t*>(&points[4*atomIndex]));
 
-    const size_t numNeighboursPadded = neighbours.first.size();
-
-    for (size_t i = 0; i < numNeighboursPadded; i+=8)
+    for (size_t i = 0; i < neighbours.second; i+=8)
     {
         energiesTotal = _mm256_add_ps(energiesTotal, lastEnergies);
 
@@ -53,7 +51,7 @@ float DiscreteCluster::getAtomEnergyAVX(uint64_t atomIndex, const std::pair<std:
         lastEnergies = _mm512_i64gather_ps(squaredDistances, lookup.data(), 4);
     }
     // remove energy contribution of the entries corresponding to padded neighbours
-    size_t padding = numNeighboursPadded - neighbours.second;
+    size_t padding = neighbours.first.size() - neighbours.second;
     __mmask8 mask = (0xFF >> padding);
     lastEnergies = _mm256_maskz_mov_ps(mask, lastEnergies);
 
@@ -100,7 +98,6 @@ float DiscreteCluster::getAtomEnergyAVX(uint64_t atomIndex, const std::vector<fl
     energiesTotal = _mm256_add_ps(energiesTotal, lastEnergies);
     return horizontalSumAVX(energiesTotal);
 }
-
 
 float DiscreteCluster::getClusterEnergy(float gridSpacingSquared) const {
     //TODO slow? basic (exact) implementation to get cluster energy. 
@@ -179,6 +176,15 @@ void DiscreteCluster::copyTo(DiscreteCluster& otherCluster) const {
 // ===================================================================================
 // make the vectors with lengts of a multiple of 8, such that SIMD instructions can be optimally used in getAtomEnergyAVX
 Cluster::Cluster(const size_t numberOfPoints) : x((numberOfPoints + 7) & ~size_t(7)), y((numberOfPoints + 7) & ~size_t(7)), z((numberOfPoints + 7) & ~size_t(7)), n(numberOfPoints), nPadded((numberOfPoints + 7) & ~size_t(7)) {}
+
+Cluster::Cluster(const DiscreteCluster& discreteCluster, float gridSpacing) : Cluster(discreteCluster.n) {
+    for (size_t i = 0; i < discreteCluster.n; i++)
+    {
+        x[i] = static_cast<float>(gridSpacing * discreteCluster.points[4*i]);
+        y[i] = static_cast<float>(gridSpacing * discreteCluster.points[4*i+1]);
+        z[i] = static_cast<float>(gridSpacing * discreteCluster.points[4*i+2]);
+    }
+}
 
 void Cluster::setPoint(const size_t atomIndex, const float xVal, const float yVal, const float zVal) {
     x[atomIndex] = xVal;

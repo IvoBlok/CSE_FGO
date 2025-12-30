@@ -51,10 +51,10 @@ SingleRunResult FuzzyGlobalOptimizer::runSingleWithSeed(uint32_t seed) {
 
 SingleRunResult FuzzyGlobalOptimizer::runSingle(std::mt19937& rng) {
     RunState state;
-    auto& startCandidate = state.discreteCandidates.emplace_back(DiscreteCluster(), std::numeric_limits<float>::infinity());
+    auto& startCandidate = state.discCandidates.emplace_back(DiscreteCluster(), std::numeric_limits<float>::infinity());
 
     // step 1 (from paper)
-    state.DMCWalker = state.discreteCandidates.front().first;
+    state.DMCWalker = state.discCandidates.front().first;
     initializeCluster(startCandidate.first, rng);
     localDiscreteOptimization(startCandidate.first);
     startCandidate.second = startCandidate.first.getClusterEnergy(params.gridSpacingSquared);
@@ -65,6 +65,20 @@ SingleRunResult FuzzyGlobalOptimizer::runSingle(std::mt19937& rng) {
     runDMCLayer(state, params.dmcLayer1, rng);
     runDMCLayer(state, params.dmcLayer2, rng);
     
+    // step 3
+    for (const auto& candidate : state.discCandidates)
+    {
+        if (candidate.second < state.discCandidates.back().second + 2.0f) {
+            state.contCandidates.emplace_back(Cluster(candidate.first, params.gridSpacing), 0.0f);
+            state.contCandidates.back().second = state.contCandidates.back().first.getClusterEnergyAVX(fastLJ);
+            std::cout << "disc->cont: " << candidate.second << " => " << state.contCandidates.back().second;
+            localRealOptimization(state.contCandidates.back());
+            std::cout << " => " << state.contCandidates.back().second << "\n";
+        }
+    }
+    
+
+
     //TODO
 
     return SingleRunResult{};
@@ -162,9 +176,8 @@ void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMC
             // hence after localDiscreteOptimization, we would know how much the discreteOptimization steps (an swap) changed the walker cluster energy, saving us a clusterEnergy call at the cost of some float operations
             float candidateEnergy = proposal.getClusterEnergy(params.gridSpacingSquared); 
             
-            if(candidateEnergy < state.discreteCandidates.back().second) { // the back is guaranteed to be the best
-                state.bestDistcrete = state.discreteCandidates.size();
-                state.discreteCandidates.emplace_back(proposal, candidateEnergy);
+            if(candidateEnergy < state.discCandidates.back().second) { // the back is guaranteed to be the best
+                state.discCandidates.emplace_back(proposal, candidateEnergy);
                 std::cout << "DMC found: " << candidateEnergy << "\n";
                 stepsSinceImprovement = 0;
             }

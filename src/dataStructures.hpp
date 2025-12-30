@@ -19,7 +19,6 @@ static inline float horizontalSumAVX(__m256 x) {
     return _mm_cvtss_f32(x32);
 }
 
-
 struct RealLJCalculator {
 private:
     const __m256 TWO = _mm256_set1_ps(2.0f);
@@ -65,6 +64,7 @@ public:
 };
 
 
+
 struct DiscreteCluster {
 public:
     alignas(64) std::vector<int16_t> points; // the points are stored like: [x1, y1, z1, 0, x2, y2, z2, 0, ...]
@@ -87,6 +87,8 @@ public:
     void copyTo(DiscreteCluster& otherCluster) const;
 };
 
+
+
 struct Cluster {
 public:
     alignas(64) std::vector<float> x, y, z;
@@ -97,6 +99,7 @@ private:
 public:
     Cluster() = default;
     explicit Cluster(const size_t numberOfPoints);
+    explicit Cluster(const DiscreteCluster& discreteCluster, float gridSpacing);
 
     Cluster(const Cluster& other) = default;
     Cluster& operator=(const Cluster& other) = default;

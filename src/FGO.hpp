@@ -79,9 +79,10 @@ public:
     alignas(64) std::vector<float> lookup;
 
     struct RunState {
-        std::vector<std::pair<DiscreteCluster, float>> discreteCandidates;
-        size_t bestDistcrete = 0;
-
+        std::vector<std::pair<DiscreteCluster, float>> discCandidates;
+        std::vector<std::pair<Cluster, float>> contCandidates;
+        size_t bestContinuous;
+        
         DiscreteCluster DMCWalker;
     };
 
