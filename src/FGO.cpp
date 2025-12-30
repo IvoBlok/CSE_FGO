@@ -58,22 +58,24 @@ SingleRunResult FuzzyGlobalOptimizer::runSingle(std::mt19937& rng) {
     initializeCluster(startCandidate.first, rng);
     localDiscreteOptimization(startCandidate.first);
     startCandidate.second = startCandidate.first.getClusterEnergy(params.gridSpacingSquared);
-    std::cout << "SLO found: " << startCandidate.second << "\n";
+    //DEBUG std::cout << "SLO found: " << startCandidate.second << "\n";
 
     // step 2
     state.DMCWalker = startCandidate.first;
+    //DEBUG std::cout << "=== DMC1 ===\n";
     runDMCLayer(state, params.dmcLayer1, rng);
+    //DEBUG std::cout << "=== DMC2 ===\n";
     runDMCLayer(state, params.dmcLayer2, rng);
     
     // step 3
+    //DEBUG std::cout << "=== LRO ===\n";
     for (const auto& candidate : state.discCandidates)
     {
         if (candidate.second < state.discCandidates.back().second + 2.0f) {
             state.contCandidates.emplace_back(Cluster(candidate.first, params.gridSpacing), 0.0f);
             state.contCandidates.back().second = state.contCandidates.back().first.getClusterEnergyAVX(fastLJ);
-            std::cout << "disc->cont: " << candidate.second << " => " << state.contCandidates.back().second;
             localRealOptimization(state.contCandidates.back());
-            std::cout << " => " << state.contCandidates.back().second << "\n";
+            //DEBUG std::cout << "disc->cont: " << candidate.second << " => " << state.contCandidates.back().second << "\n";
         }
     }
     
@@ -162,14 +164,14 @@ void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMC
         }
 
         walker.copyTo(proposal);
-        setPointInBall(proposal, 1, activeAtom, rng, 1.0f, proposal.points[4*targetAtom], proposal.points[4*targetAtom+1], proposal.points[4*targetAtom+2], false);
+        setPointInBall(proposal, 1, activeAtom, rng, 1.0f, proposal.points[4*targetAtom], proposal.points[4*targetAtom+1], proposal.points[4*targetAtom+2]);
 
         localDiscreteFrozenOptimization(proposal, activeAtom);
 
         float deltaAtomEnergy = proposal.getAtomEnergyAVX(activeAtom, lookup) - atomEnergies[activeAtom];
 
         stepsSinceImprovement++;
-        if (deltaAtomEnergy < 0.0f || uniformDist(rng) < fast_exp(-deltaAtomEnergy * dmcParams.invAcceptanceEnergy)) {
+        if (deltaAtomEnergy < 0.0f || uniformDist(rng) < std::exp(-deltaAtomEnergy * dmcParams.invAcceptanceEnergy)) {
             localDiscreteOptimization(proposal);
 
             //TODO the cost of this could be removed, by modifying localDiscreteOptimization to keep track of the total sum of changes from improvements in getAtomEnergyAVX. getAtomEnergyAVX uses the cutoff distance though, so be sure to only compare it to cluster energies that also used (the same) cutoff.
@@ -178,10 +180,10 @@ void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMC
             
             if(candidateEnergy < state.discCandidates.back().second) { // the back is guaranteed to be the best
                 state.discCandidates.emplace_back(proposal, candidateEnergy);
-                std::cout << "DMC found: " << candidateEnergy << "\n";
+                //DEBUG std::cout << "DMC found: " << candidateEnergy << "\n";
                 stepsSinceImprovement = 0;
+                proposal.copyTo(walker); // TODO unsure of if this should be here, so walker is just always the best discrete cluster, or outside this if condition, so DMC is more explorative and sometimes accepts a worse walker
             }
-            proposal.copyTo(walker); // copy data from proposal into walker, regardless of if proposal is a new best
         }
     }
 }
@@ -191,14 +193,14 @@ void FuzzyGlobalOptimizer::localDiscreteOptimization(DiscreteCluster& cluster) {
     alignas(64) std::vector<std::pair<std::vector<uint64_t>, uint64_t>> neighboursLists;
 
     const int32_t squaredCutoffDistance = params.cutoffDistance * params.cutoffDistance;
-
+    
     for (size_t i = 0; i < cluster.n; i++) {
         activeList.emplace_back(i);
         neighboursLists.emplace_back(cluster.getNeighbours(i,squaredCutoffDistance));
     }
 
     while (!activeList.empty())
-        activeList.remove_if([&cluster, &neighboursLists, this](int i){ return localDiscreteFrozenOptimization(cluster, i, neighboursLists[i]) == 0; });
+        activeList.remove_if([&cluster, this](int i){ return localDiscreteFrozenOptimization(cluster, i) == 0; });
 }
 
 void FuzzyGlobalOptimizer::localRealOptimization(std::pair<Cluster, float>& candidate) {

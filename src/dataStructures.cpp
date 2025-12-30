@@ -113,6 +113,9 @@ float DiscreteCluster::getClusterEnergy(float gridSpacingSquared) const {
             const int32_t dz = points[4*i+2] - points[4*j+2];
 
             const int32_t sum = dx*dx + dy*dy + dz*dz;
+            if (sum == 0)
+                return std::numeric_limits<float>::infinity();
+
             const float invr2 = 1.0f/(gridSpacingSquared * sum);
 
             const float invr6 = invr2 * invr2 * invr2;
