@@ -70,6 +70,7 @@ public:
     alignas(64) std::vector<int16_t> points; // the points are stored like: [x1, y1, z1, 0, x2, y2, z2, 0, ...]
     size_t n;
 private:
+    size_t nPadded;
     __m512i squaredCutoffSIMD;
 
 public:
@@ -77,11 +78,13 @@ public:
     explicit DiscreteCluster(const size_t numberOfPoints, const int32_t cutoffSIMD);  
 
     float getAtomEnergyAVX(uint64_t atomIndex, const std::vector<uint64_t>& neighbours, const std::vector<float>& lookup) const;
-    float getAtomEnergyAVX(uint64_t atomIndex) const;
+    float getAtomEnergyAVX(uint64_t atomIndex, const std::vector<float>& lookup) const;
     float getClusterEnergy(float gridSpacingSquared) const;
 
     std::vector<uint64_t> getNeighbours(uint64_t atomIndex, uint32_t squaredCutoff) const;
     bool doesPointOverlap(uint64_t atomIndex, uint64_t maxIncludedIndex) const;
+
+    void copyTo(DiscreteCluster& otherCluster) const;
 };
 
 struct Cluster {

@@ -67,7 +67,8 @@ struct MultiRunResult {
 
 
 class FuzzyGlobalOptimizer {
-private: 
+//private: 
+public:
     FGOParameters params;
     std::mt19937 rng;
 
@@ -105,7 +106,8 @@ public:
     void setPointInBall(DiscreteCluster& cluster, int spacingMultiple, size_t index, std::mt19937& rng, float radius, int16_t cx, int16_t cy, int16_t cz, bool allowZero = true);
     void setPointOnSphere(DiscreteCluster& cluster, int spacingMultiple, size_t index, std::mt19937& rng, float radius, int16_t cx, int16_t cy, int16_t cz);
 
-    size_t localDiscreteFrozenOptimization(DiscreteCluster& cluster, const size_t frozenIndex, const std::vector<uint64_t>& neighbours);
+    size_t localDiscreteFrozenOptimization(DiscreteCluster& cluster, const size_t freeIndex, const std::vector<uint64_t>& neighbours);
+    size_t localDiscreteFrozenOptimization(DiscreteCluster& cluster, const size_t freeIndex);
 };
 
 #endif // FUZZY_GLOBAL_OPTIMIZER_H

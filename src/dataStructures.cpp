@@ -11,15 +11,19 @@
 
 // DiscreteCluster Implementation
 // ===================================================================================
-DiscreteCluster::DiscreteCluster() : n(0), squaredCutoffSIMD(_mm512_setzero_si512()) {}
+DiscreteCluster::DiscreteCluster() : n(0), nPadded(0), squaredCutoffSIMD(_mm512_setzero_si512()) {}
 
-DiscreteCluster::DiscreteCluster(const size_t numberOfPoints, const int32_t cutoffSIMD) : points(4*numberOfPoints), n(numberOfPoints), squaredCutoffSIMD(_mm512_set1_epi32(cutoffSIMD * cutoffSIMD)) {}
+DiscreteCluster::DiscreteCluster(const size_t numberOfPoints, const int32_t cutoffSIMD)
+     : points(4*((numberOfPoints + 7) & ~size_t(7))), 
+       n(numberOfPoints), 
+       nPadded((numberOfPoints + 7) & ~size_t(7)),
+       squaredCutoffSIMD(_mm512_set1_epi32(cutoffSIMD * cutoffSIMD)) {}
 
 float DiscreteCluster::getAtomEnergyAVX(uint64_t atomIndex, const std::vector<uint64_t>& neighbours, const std::vector<float>& lookup) const {
     // neighbours is required to have a multiple of 8 elements, where extra entries can be added by using the same index as that of the main atom.
     // this implementation does require that we never have any two distinct points in the cluster at the same position, which with some different initialization of the starting cluster should automatically get enforced.
 
-    __m256 energyTotal = _mm256_setzero_ps();
+    __m256 energiesTotal = _mm256_setzero_ps();
     __m512i atom = _mm512_set1_epi64(*reinterpret_cast<const int64_t*>(&points[4*atomIndex]));
 
     for (size_t i = 0; i < neighbours.size(); i+=8)
@@ -41,22 +45,45 @@ float DiscreteCluster::getAtomEnergyAVX(uint64_t atomIndex, const std::vector<ui
         squaredDistances = _mm512_maskz_mov_epi32(outOfRangeMask, squaredDistances);
 
         __m256 energies = _mm512_i64gather_ps(squaredDistances, lookup.data(), 4);
-        energyTotal = _mm256_add_ps(energyTotal, energies);
+        energiesTotal = _mm256_add_ps(energiesTotal, energies);
     }
 
-    return horizontalSumAVX(energyTotal);
+    return horizontalSumAVX(energiesTotal);
 }
 
-float DiscreteCluster::getAtomEnergyAVX(uint64_t atomIndex) const {
-    __m256 energyTotal = _mm256_setzero_ps();
+float DiscreteCluster::getAtomEnergyAVX(uint64_t atomIndex, const std::vector<float>& lookup) const {
+    __m256 energiesTotal = _mm256_setzero_ps();
+    __m256 lastEnergies = _mm256_setzero_ps();
     __m512i atom = _mm512_set1_epi64(*reinterpret_cast<const int64_t*>(&points[4*atomIndex]));
 
-    //TODO 
-    for (size_t i = 0; i < count; i++)
+    for (size_t i = 0; i < nPadded; i += 8)
     {
-        //__m512i points 
+        // this ordering, of only adding the energies of the last loop to the total at the start of the next loop, allows us to avoid any branches in the main loop.
+        // We can then, after the last iteration, when the block with irrelevant potential padded elements got done, remove those incorrect entries efficiently after the main loop.
+        energiesTotal = _mm256_add_ps(energiesTotal, lastEnergies);
+
+        __m512i pointData = _mm512_loadu_epi64(reinterpret_cast<const int64_t*>(&points[4*i]));
+
+        __m512i diff = _mm512_sub_epi16(atom, pointData);
+        __m512i squaredXY = _mm512_madd_epi16(diff, diff);
+        __m512i shiftedLeft = _mm512_alignr_epi32(squaredXY, squaredXY, 1);
+        __m512i squaredDistances = _mm512_add_epi32(squaredXY, shiftedLeft);
+        squaredDistances = _mm512_maskz_mov_epi32(0x5555, squaredDistances);
+
+        // only calculate energy for those within the cutoff range
+        __mmask16 outOfRangeMask = _mm512_cmpgt_epi32_mask(squaredCutoffSIMD, squaredDistances);
+        squaredDistances = _mm512_maskz_mov_epi32(outOfRangeMask, squaredDistances);
+
+        lastEnergies = _mm512_i64gather_ps(squaredDistances, lookup.data(), 4);
     }
     
+    // remove energy contribution of the entries corresponding to padded points
+    size_t padding = nPadded - n;
+    __mmask8 mask = (0xFF >> padding);
+    lastEnergies = _mm256_maskz_mov_ps(mask, lastEnergies);
+
+    energiesTotal = _mm256_add_ps(energiesTotal, lastEnergies);
+    return horizontalSumAVX(energiesTotal);
 }
 
 
@@ -121,6 +148,13 @@ bool DiscreteCluster::doesPointOverlap(uint64_t atomIndex, uint64_t maxIncludedI
             return true;
     }
     return false;
+}
+
+void DiscreteCluster::copyTo(DiscreteCluster& otherCluster) const {
+    otherCluster.points = points;
+    otherCluster.n = n;
+    otherCluster.nPadded = nPadded;
+    otherCluster.squaredCutoffSIMD = squaredCutoffSIMD;
 }
 
 

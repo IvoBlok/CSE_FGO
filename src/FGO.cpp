@@ -58,11 +58,12 @@ SingleRunResult FuzzyGlobalOptimizer::runSingle(std::mt19937& rng) {
     initializeCluster(startCandidate.first, rng);
     localDiscreteOptimization(startCandidate.first);
     startCandidate.second = startCandidate.first.getClusterEnergy(params.gridSpacingSquared);
+    std::cout << "SLO found: " << startCandidate.second << "\n";
 
     // step 2
     state.DMCWalker = startCandidate.first;
     runDMCLayer(state, params.dmcLayer1, rng);
-    runDMCLayer(state, params.dmcLayer2, rng);
+    //runDMCLayer(state, params.dmcLayer2, rng);
     
     //TODO
 
@@ -115,7 +116,7 @@ void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMC
         float sumActive = 0.f, sumTarget = 0.f;
         for (size_t i = 0; i < params.numberOfAtoms; i++)
         {
-            const float E = walker.getAtomEnergyAVX(i); // how are we gonna do neighbours here? 
+            const float E = walker.getAtomEnergyAVX(i, lookup); // how are we gonna do neighbours here? 
             atomEnergies[i] = E;
             
             const float wa = fast_exp(E * dmcParams.invActiveEnergy);
@@ -147,11 +148,11 @@ void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMC
         }
 
         walker.copyTo(proposal);
-        setPointInBall(proposal, 1, activeAtom, rng, 1.0f, proposal.points[4*targetAtom], proposal.points[4*targetAtom+1], proposal.points[4*targetAtom+2], false); // TODO somehow this should not put the point 1 next to any of the existing points
+        setPointInBall(proposal, 1, activeAtom, rng, 1.0f, proposal.points[4*targetAtom], proposal.points[4*targetAtom+1], proposal.points[4*targetAtom+2], false); // TODO CRUCIAL somehow this should not put the point 1 next to any of the existing points
 
         localDiscreteFrozenOptimization(proposal, activeAtom);
 
-        float deltaAtomEnergy = proposal.getAtomEnergyAVX(activeAtom) - atomEnergies[activeAtom];
+        float deltaAtomEnergy = proposal.getAtomEnergyAVX(activeAtom, lookup) - atomEnergies[activeAtom];
 
         stepsSinceImprovement++;
         if (deltaAtomEnergy < 0.0f || uniformDist(rng) < fast_exp(-deltaAtomEnergy * dmcParams.invAcceptanceEnergy)) {
@@ -164,6 +165,7 @@ void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMC
             if(candidateEnergy < state.discreteCandidates.back().second) { // the back is guaranteed to be the best
                 state.bestDistcrete = state.discreteCandidates.size();
                 state.discreteCandidates.emplace_back(proposal, candidateEnergy);
+                std::cout << "DMC found: " << candidateEnergy << "\n";
                 stepsSinceImprovement = 0;
             }
             walker = proposal; // copy data from proposal into walker, regardless of if proposal is a new best
@@ -299,6 +301,43 @@ size_t FuzzyGlobalOptimizer::localDiscreteFrozenOptimization(DiscreteCluster& cl
         cluster.points[4*freeIndex+axis] -= 2;
 
         newAtomEnergy = cluster.getAtomEnergyAVX(freeIndex, neighbours, lookup);
+
+        if (newAtomEnergy < oldAtomEnergy) {
+            oldAtomEnergy = newAtomEnergy;
+            stepsSinceChange = 0;
+            numChanges++;
+            continue;
+        }
+
+        cluster.points[4*freeIndex+axis] += 1;
+        stepsSinceChange++;
+    }
+
+    return numChanges;
+}
+
+size_t FuzzyGlobalOptimizer::localDiscreteFrozenOptimization(DiscreteCluster& cluster, const size_t freeIndex) {
+    float oldAtomEnergy = cluster.getAtomEnergyAVX(freeIndex, lookup);
+    int stepsSinceChange, numChanges, axis;
+    stepsSinceChange = numChanges = axis = 0;
+
+    while (stepsSinceChange < 3) {
+        axis = (++axis) % 3;
+
+        cluster.points[4*freeIndex+axis] += 1;
+
+        float newAtomEnergy = cluster.getAtomEnergyAVX(freeIndex, lookup);
+
+        if (newAtomEnergy < oldAtomEnergy) {
+            oldAtomEnergy = newAtomEnergy;
+            stepsSinceChange = 0;
+            numChanges++;
+            continue;
+        }
+
+        cluster.points[4*freeIndex+axis] -= 2;
+
+        newAtomEnergy = cluster.getAtomEnergyAVX(freeIndex, lookup);
 
         if (newAtomEnergy < oldAtomEnergy) {
             oldAtomEnergy = newAtomEnergy;
