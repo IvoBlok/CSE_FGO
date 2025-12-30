@@ -30,9 +30,12 @@ FuzzyGlobalOptimizer::FuzzyGlobalOptimizer(const FGOParameters& params)
     const float squaredGridSpacing = params.gridSpacing * params.gridSpacing;
     const size_t maxSquaredDistance = params.cutoffDistance * params.cutoffDistance + 16; // + 16 is just a safety measure, such that I'm sure AVX ops don't load unwanted data
     lookup.reserve(maxSquaredDistance);
-
-    lookup.emplace_back(std::numeric_limits<float>::infinity()); // element zero is positive infinity
-    for (size_t i = 1; i < maxSquaredDistance; i++) {
+    
+    // the elements in lookup are shifted one up; element zero is a special one used for computational efficiency with the AVX implementation.
+    // so the LJ potential for r^2 = 0 is at index 1, the one for r^2 = 1 at index 2, etc...
+    lookup.emplace_back(0.f); // element zero is zero; a special 
+    lookup.emplace_back(std::numeric_limits<float>::infinity()); // element one is set to positive infinity, though technically for LJ it is undefined at r^2 = 0
+    for (size_t i = 0; i < maxSquaredDistance - 2; i++) {
         const float invr2 = 1.0f / (i * squaredGridSpacing);
         const float invr6 = invr2 * invr2 * invr2;
 
@@ -60,20 +63,16 @@ SingleRunResult FuzzyGlobalOptimizer::runSingle(std::mt19937& rng) {
     initializeCluster(startCandidate.first, rng);
     localDiscreteOptimization(startCandidate.first);
     startCandidate.second = startCandidate.first.getClusterEnergy(params.gridSpacingSquared);
-    //DEBUG std::cout << "SLO found: " << startCandidate.second << "\n";
 
     // step 2
     auto startDMC1 = std::chrono::high_resolution_clock::now();
     state.DMCWalker = startCandidate.first;
-    //DEBUG std::cout << "=== DMC1 ===\n";
     runDMCLayer(state, params.dmcLayer1, rng);
     auto endDMC1 = std::chrono::high_resolution_clock::now();
-    //DEBUG std::cout << "=== DMC2 ===\n";
     runDMCLayer(state, params.dmcLayer2, rng);
     auto endDMC2 = std::chrono::high_resolution_clock::now();
 
     // step 3
-    //DEBUG std::cout << "=== LRO ===\n";
     auto startRealOpt = std::chrono::high_resolution_clock::now();
     for (const auto& candidate : state.discCandidates)
     {
@@ -81,7 +80,6 @@ SingleRunResult FuzzyGlobalOptimizer::runSingle(std::mt19937& rng) {
             state.contCandidates.emplace_back(Cluster(candidate.first, params.gridSpacing), 0.0f);
             state.contCandidates.back().second = state.contCandidates.back().first.getClusterEnergyAVX(fastLJ);
             localRealOptimization(state.contCandidates.back());
-            //DEBUG std::cout << "disc->cont: " << candidate.second << " => " << state.contCandidates.back().second << "\n";
         }
     }
     auto endRealOpt = std::chrono::high_resolution_clock::now();
@@ -128,15 +126,6 @@ void FuzzyGlobalOptimizer::initializeCluster(DiscreteCluster& cluster, std::mt19
     {
         setPointInBall(cluster, i, rng, spawningRadius, 0, 0, 0);
     }
-    
-    /*  
-    setPointInBall(cluster, 0, rng, spawningRadius, 0, 0, 0);
-    for (size_t i = 1; i < params.numberOfAtoms; i++) {
-        do {
-            setPointInBall(cluster, i, rng, spawningRadius, 0, 0, 0);
-        } while (cluster.doesPointOverlap(i, i-1));
-    }
-    */
 }
 
 void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMCParameters& dmcParams, std::mt19937& rng) {
@@ -203,10 +192,9 @@ void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMC
             
             if(candidateEnergy < state.discCandidates.back().second) { // the back is guaranteed to be the best
                 state.discCandidates.emplace_back(proposal, candidateEnergy);
-                //DEBUG std::cout << "DMC found: " << candidateEnergy << "\n";
                 stepsSinceImprovement = 0;
-                proposal.copyTo(walker); // TODO unsure of if this should be here, so walker is just always the best discrete cluster, or outside this if condition, so DMC is more explorative and sometimes accepts a worse walker
             }
+            proposal.copyTo(walker); // TODO unsure of if this should be here (paper isn't very clear either, though I feel like it suggests the deeper if statement), but success rate is drastically better out here (so DMC is more explorative), so that's good enough for me
         }
     }
 }
@@ -223,7 +211,7 @@ void FuzzyGlobalOptimizer::localDiscreteOptimization(DiscreteCluster& cluster) {
     }
 
     while (!activeList.empty())
-        activeList.remove_if([&cluster, &neighboursLists, this](int i){ return localDiscreteFrozenOptimization(cluster, i) == 0; });
+        activeList.remove_if([&cluster, &neighboursLists, this](int i){ return localDiscreteFrozenOptimization(cluster, i, neighboursLists[i]) == 0; });
 }
 
 void FuzzyGlobalOptimizer::localRealOptimization(std::pair<Cluster, float>& candidate) {

@@ -16,16 +16,26 @@ Cmake is used to handle the build process and dependencies. The single Cmake fil
     cmake ..
     cmake --build .
 
-PROFILING
+Running
+========
+you can do a test by running first running the optimization: 
+
+    ./main
+
+the results can then be rendered with:
+
+    python3 src/benchmarking/visualize_benchmark.py build/benchmark_results.json 
+
+Note that the energy distribution plot gives the distribution of each algorithm step shared across ALL samples for that cluster size. The number below each column is the number of tries (out of the total sample size) that got at least 1 candidate to the global minimum.
+
+Profiling
 ========
 I now use perf and hotspot. So for example gather data with 'perf record --call-graph dwarf ./main_debug', then run 'hotspot' to get the results.
 Alternatively use the GUI in (sudo) hotspot; Framepoint is probably the nicest mode. 
 
-TODO
+To Do
 =========
- - the discrete-continuous implementation here differs drastically in performance from the fully continuous version this branched off from; Why is this?
- - sometimes the localRealOptimization method moves a cluster with good energy, to pretty much exactly E=0. That might also be why the boxplots so far have very often had random peaks up to the zero line
- - the spawningRadius seems to matter quite a bit for how many DMC candidates get generated; for larger N (20+), with standard (/small) spawningRadius, the first local optimization often results in a quite shit cluster (E >> 0). DMC then only manages to create maybe 2-5 clusters, with also pretty shit E. local real optimization then suddenly optimizes those from say E=100, to E=-30; an absurd improvement relative to its behaviour for smaller N, where it causes an improvement in the range [0, 4] with in most cases it being closer to 0.
+ - the quadratic fit local real optimization, on rare occasions, instead of decreasing the energy, increases it by quite a bit; leading to occasional spikes in the RealCluster violin plots. 
  - Investigate the lower success percentage compared to the paper results
  - localDiscreteFrozenOptimization can probably be sped up further; only the freeAtom moves around; so getAtomEnergy() could keep the same neighbour points data loaded, only updating the broadcasted freeAtom
  - rewrite gradient calculation using SIMD instructions?

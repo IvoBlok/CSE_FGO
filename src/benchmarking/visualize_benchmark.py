@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib.ticker as ticker
 from matplotlib import rcParams
+import matplotlib.patches as mpatches
 import os
 
 def parse_command_line():
@@ -79,7 +80,7 @@ def extract_plot_data(data):
                 n_data['real_energies'].append(cluster[1])
 
             for cluster in single_run.get('contCandidates', []):
-                if (cluster[1] < n_data['exact'] + 1e-3):
+                if (cluster[1] and cluster[1] < n_data['exact'] + 1e-3):
                     n_data['correct'] += 1
                     break
 
@@ -162,31 +163,32 @@ def create_energy_boxplot(ax, plot_data):
         correct_counts.append(data['correct'])
         sample_sizes.append(data['samplesize'])
 
-    ax.boxplot(dmc_energy_data, positions=n_values, widths=width, patch_artist=True, whis=[0, 100], label='DMC Clusters (step 2)')
-    box = ax.boxplot(real_energy_data, positions=n_values, widths=width, patch_artist=True, whis=[0, 100], label='Real Clusters (step 3)')
+    DMCPlots = ax.violinplot(dmc_energy_data, positions=n_values, showmeans=False, showmedians=False, showextrema=False)
+    RealPlots = ax.violinplot(real_energy_data, positions=n_values, showmeans=False, showmedians=False)
 
-    for box_element in box['boxes']:
-        box_element.set_facecolor('lightblue')
-        box_element.set_edgecolor('black')
-    
-    for median in box['medians']:
-        median.set_color('black')
-        median.set_linewidth(2)
-    
-    for whisker in box['whiskers']:
-        whisker.set_color('black')
-    
-    for cap in box['caps']:
-        cap.set_color('black')
-    
-    for flier in box['fliers']:
-        flier.set_marker('o')
-        flier.set_markerfacecolor('red')
-        flier.set_markersize(5)
+    for pc in DMCPlots['bodies']:
+        pc.set_facecolor("#1DD7FC")
+        pc.set_edgecolor("#000000D5")
+        pc.set_alpha(0.3)
+
+    for pc in RealPlots['bodies']:
+        pc.set_facecolor("#001AAD")
+        pc.set_edgecolor("#000000D5")
+        pc.set_alpha(0.5)
+
+    for line_component in ['cmins', 'cmaxes', 'cbars']:
+        if line_component in DMCPlots:
+            DMCPlots[line_component].set_color("#000000D5")
+            DMCPlots[line_component].set_alpha(0.3)
+
+    for line_component in ['cmins', 'cmaxes', 'cbars']:
+        if line_component in RealPlots:
+                RealPlots[line_component].set_color("#000000D5")
+                RealPlots[line_component].set_alpha(0.5)
 
     for n, starts, exact, correct, samplesize in zip(n_values, start_energy_data, exact_values, correct_counts, sample_sizes):
         ax.hlines(y=exact, xmin=n - width/2, xmax=n + width/2, 
-                    color='red', linestyle='--', linewidth=2, alpha=0.7)
+                    color="#960000", linestyle='--', linewidth=2, alpha=0.7)
         
         ax.text(n, exact - 1, correct, 
                 ha='center', va='top',
@@ -196,11 +198,11 @@ def create_energy_boxplot(ax, plot_data):
         )
 
         for start in starts:
-            ax.hlines(y=start, xmin=n - width/2, xmax=n + width/2, 
-                        color='green', linestyle='--', linewidth=2, alpha=0.7)
+            ax.hlines(y=start, xmin=n - width/3, xmax=n + width/3, 
+                        color="#025D13", linestyle='--', linewidth=1, alpha=0.2)
     
     exact_values = np.array(exact_values)
-    ax.set_ylim([np.min(exact) * 1.05, 1e4])
+    ax.set_ylim([np.min(exact) * 1.05, 0])
     ax.set_xlabel('N')
     ax.set_ylabel('Energy [-]')
     ax.set_title(f'Energy Distribution of Candidates by N, {sample_sizes[0]} samples')
@@ -210,7 +212,12 @@ def create_energy_boxplot(ax, plot_data):
     ax.set_xticks(marked_n)
     ax.set_xticklabels([str(n) for n in marked_n])
 
-    ax.legend(loc='upper left')
+    start_patch = mpatches.Patch(color="#025D13", alpha=0.5, label='Start Clusters (Step 1)')
+    dmc_patch = mpatches.Patch(color="#1DD7FC", alpha=0.3, label='DMC Clusters (Step 2)')
+    real_patch = mpatches.Patch(color="#001AAD", alpha=0.5, label='Real Clusters (Step 3)')
+    min_patch = mpatches.Patch(color="#960000", alpha=0.7, label='Global Minimum')
+
+    ax.legend(handles=[start_patch, dmc_patch, real_patch, min_patch], loc='upper right')
     ax.grid(True, alpha=0.3)
     
     def format_coord(x, y):

@@ -40,7 +40,7 @@ float DiscreteCluster::getAtomEnergyAVX(uint64_t atomIndex, const std::pair<std:
 
         __m512i shiftedLeft = _mm512_alignr_epi32(squaredXY, squaredXY, 1);
         __m512i squaredDistances = _mm512_add_epi32(squaredXY, shiftedLeft);
-
+        squaredDistances = _mm512_add_epi32(squaredDistances, _mm512_set1_epi32(1)); // add 1 to each squaredDistance entry; this is because the lookup is offset by 1. This gives an extra special value at lookup[0], which is useful to avoid extra computations when filtering distances that are outside the cutoff range
         squaredDistances = _mm512_maskz_mov_epi32(0x5555, squaredDistances); // set every second element to zero, such that the next line can interpret it directly as 8 64bit (unsigned) ints
         
         // not all neighbours might still be within the cutoff range, and hence be in the range of the lookup array. So set any that go over the limit to 0, such that their energy contribution is 0.
@@ -76,6 +76,7 @@ float DiscreteCluster::getAtomEnergyAVX(uint64_t atomIndex, const std::vector<fl
         __m512i squaredXY = _mm512_madd_epi16(diff, diff);
         __m512i shiftedLeft = _mm512_alignr_epi32(squaredXY, squaredXY, 1);
         __m512i squaredDistances = _mm512_add_epi32(squaredXY, shiftedLeft);
+        squaredDistances = _mm512_add_epi32(squaredDistances, _mm512_set1_epi32(1)); // add 1 to each squaredDistance entry; this is because the lookup is offset by 1. This gives an extra special value at lookup[0], which is useful to avoid extra computations when filtering distances that are outside the cutoff range
         squaredDistances = _mm512_maskz_mov_epi32(0x5555, squaredDistances);
 
         // only calculate energy for those within the cutoff range

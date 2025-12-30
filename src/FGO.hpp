@@ -65,8 +65,7 @@ struct MultiRunResult {
 
 
 class FuzzyGlobalOptimizer {
-//private: 
-public:
+private: 
     FGOParameters params;
     std::mt19937 rng;
 
@@ -95,7 +94,7 @@ public:
 
     MultiRunResult runMultiple(size_t numRuns);
 
-//private: 
+private: 
     void initializeCluster(DiscreteCluster& cluster, std::mt19937& rng);
     void runDMCLayer(RunState& state, const FGOParameters::DMCParameters& dmcParams, std::mt19937& rng);
     void localDiscreteOptimization(DiscreteCluster& cluster);
