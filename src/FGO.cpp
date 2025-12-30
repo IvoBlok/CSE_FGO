@@ -216,7 +216,7 @@ void FuzzyGlobalOptimizer::localDiscreteOptimization(DiscreteCluster& cluster) {
     }
 
     while (!activeList.empty())
-        activeList.remove_if([&cluster, this](int i){ return localDiscreteFrozenOptimization(cluster, i) == 0; });
+        activeList.remove_if([&cluster, &neighboursLists, this](int i){ return localDiscreteFrozenOptimization(cluster, i) == 0; });
 }
 
 void FuzzyGlobalOptimizer::localRealOptimization(std::pair<Cluster, float>& candidate) {
