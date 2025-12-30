@@ -77,11 +77,11 @@ public:
     DiscreteCluster();
     explicit DiscreteCluster(const size_t numberOfPoints, const int32_t cutoffSIMD);  
 
-    float getAtomEnergyAVX(uint64_t atomIndex, const std::vector<uint64_t>& neighbours, const std::vector<float>& lookup) const;
+    float getAtomEnergyAVX(uint64_t atomIndex, const std::pair<std::vector<uint64_t>, uint64_t>& neighbours, const std::vector<float>& lookup) const;
     float getAtomEnergyAVX(uint64_t atomIndex, const std::vector<float>& lookup) const;
     float getClusterEnergy(float gridSpacingSquared) const;
 
-    std::vector<uint64_t> getNeighbours(uint64_t atomIndex, uint32_t squaredCutoff) const;
+    std::pair<std::vector<uint64_t>, uint64_t> getNeighbours(uint64_t atomIndex, uint32_t squaredCutoff) const;
     bool doesPointOverlap(uint64_t atomIndex, uint64_t maxIncludedIndex) const;
 
     void copyTo(DiscreteCluster& otherCluster) const;

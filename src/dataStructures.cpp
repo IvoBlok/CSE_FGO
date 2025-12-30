@@ -19,16 +19,22 @@ DiscreteCluster::DiscreteCluster(const size_t numberOfPoints, const int32_t cuto
        nPadded((numberOfPoints + 7) & ~size_t(7)),
        squaredCutoffSIMD(_mm512_set1_epi32(cutoffSIMD * cutoffSIMD)) {}
 
-float DiscreteCluster::getAtomEnergyAVX(uint64_t atomIndex, const std::vector<uint64_t>& neighbours, const std::vector<float>& lookup) const {
+float DiscreteCluster::getAtomEnergyAVX(uint64_t atomIndex, const std::pair<std::vector<uint64_t>, uint64_t>& neighbours, const std::vector<float>& lookup) const {
     // neighbours is required to have a multiple of 8 elements, where extra entries can be added by using the same index as that of the main atom.
-    // this implementation does require that we never have any two distinct points in the cluster at the same position, which with some different initialization of the starting cluster should automatically get enforced.
+    // numNeighbours is the number of atoms that represent actual neighbours; the length of neighbours without the padding.
+    // TODO this might be improvable by loading 2 blocks of neighbours each iteration, combining them somehow at the squaredDistances step where currently only half of the elements are used (rest is 0). Then use a 32bit index gather instruction instead, such that we can gather twice the values in the one (expensive) gather instruction.
 
     __m256 energiesTotal = _mm256_setzero_ps();
+    __m256 lastEnergies = _mm256_setzero_ps();
     __m512i atom = _mm512_set1_epi64(*reinterpret_cast<const int64_t*>(&points[4*atomIndex]));
 
-    for (size_t i = 0; i < neighbours.size(); i+=8)
+    const size_t numNeighboursPadded = neighbours.first.size();
+
+    for (size_t i = 0; i < numNeighboursPadded; i+=8)
     {
-        __m512i indices = _mm512_loadu_epi64(&neighbours[i]);
+        energiesTotal = _mm256_add_ps(energiesTotal, lastEnergies);
+
+        __m512i indices = _mm512_loadu_epi64(&neighbours.first[i]);
         __m512i neighbourPoints = _mm512_i64gather_epi64(indices, points.data(), 8);
 
         __m512i diff = _mm512_sub_epi16(atom, neighbourPoints);
@@ -44,10 +50,14 @@ float DiscreteCluster::getAtomEnergyAVX(uint64_t atomIndex, const std::vector<ui
         __mmask16 outOfRangeMask = _mm512_cmpgt_epi32_mask(squaredCutoffSIMD, squaredDistances); // bit is 0 if the distance element is larger , 1 if smaller or equal
         squaredDistances = _mm512_maskz_mov_epi32(outOfRangeMask, squaredDistances);
 
-        __m256 energies = _mm512_i64gather_ps(squaredDistances, lookup.data(), 4);
-        energiesTotal = _mm256_add_ps(energiesTotal, energies);
+        lastEnergies = _mm512_i64gather_ps(squaredDistances, lookup.data(), 4);
     }
+    // remove energy contribution of the entries corresponding to padded neighbours
+    size_t padding = numNeighboursPadded - neighbours.second;
+    __mmask8 mask = (0xFF >> padding);
+    lastEnergies = _mm256_maskz_mov_ps(mask, lastEnergies);
 
+    energiesTotal = _mm256_add_ps(energiesTotal, lastEnergies);
     return horizontalSumAVX(energiesTotal);
 }
 
@@ -75,6 +85,11 @@ float DiscreteCluster::getAtomEnergyAVX(uint64_t atomIndex, const std::vector<fl
         squaredDistances = _mm512_maskz_mov_epi32(outOfRangeMask, squaredDistances);
 
         lastEnergies = _mm512_i64gather_ps(squaredDistances, lookup.data(), 4);
+
+        // remove the contribution between atomIndex and itself (+inf). 
+        // [1, 1, 1, 1, 1, 1, 1, 1] if atomIndex is not in the range[i, i+8]. Otherwise the (7 - atomIndex % 8) element is 0. 
+        __mmask8 selfMask = (atomIndex >= i && atomIndex < i + 8) ? (0xFF ^ (1 << (atomIndex % 8))) : 0xFF;
+        lastEnergies = _mm256_maskz_mov_ps(selfMask, lastEnergies);
     }
     
     // remove energy contribution of the entries corresponding to padded points
@@ -111,7 +126,7 @@ float DiscreteCluster::getClusterEnergy(float gridSpacingSquared) const {
     return totalEnergy;
 }
 
-std::vector<uint64_t> DiscreteCluster::getNeighbours(uint64_t atomIndex, uint32_t squaredCutoff) const {
+std::pair<std::vector<uint64_t>, uint64_t> DiscreteCluster::getNeighbours(uint64_t atomIndex, uint32_t squaredCutoff) const {
     std::vector<uint64_t> neighbours;
 
     const int16_t xi = points[4*atomIndex+0];
@@ -131,14 +146,15 @@ std::vector<uint64_t> DiscreteCluster::getNeighbours(uint64_t atomIndex, uint32_
     }
 
     // ensure the vector has a length of 8, where the padding is filled with atomIndex, such that later getAtomEnergyAVX can safely load blocks of 8 neighbours at a time
-    size_t remainder = neighbours.size() % 8;
+    size_t trueNeighbourCount = neighbours.size();
+    size_t remainder = trueNeighbourCount % 8;
     if (remainder != 0) {
         size_t padding = 8 - remainder;
         for (size_t i = 0; i < padding; i++)
             neighbours.emplace_back(atomIndex);
     }
 
-    return neighbours;
+    return {neighbours, trueNeighbourCount};
 }
 
 bool DiscreteCluster::doesPointOverlap(uint64_t atomIndex, uint64_t maxIncludedIndex) const {

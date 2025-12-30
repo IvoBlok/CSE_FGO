@@ -31,7 +31,7 @@ FuzzyGlobalOptimizer::FuzzyGlobalOptimizer(const FGOParameters& params)
     const size_t maxSquaredDistance = params.cutoffDistance * params.cutoffDistance + 16; // + 16 is just a safety measure, such that I'm sure AVX ops don't load unwanted data
     lookup.reserve(maxSquaredDistance);
 
-    lookup.emplace_back(0.0f);
+    lookup.emplace_back(std::numeric_limits<float>::infinity()); // element zero is positive infinity
     for (size_t i = 1; i < maxSquaredDistance; i++) {
         const float invr2 = 1.0f / (i * squaredGridSpacing);
         const float invr6 = invr2 * invr2 * invr2;
@@ -63,7 +63,7 @@ SingleRunResult FuzzyGlobalOptimizer::runSingle(std::mt19937& rng) {
     // step 2
     state.DMCWalker = startCandidate.first;
     runDMCLayer(state, params.dmcLayer1, rng);
-    //runDMCLayer(state, params.dmcLayer2, rng);
+    runDMCLayer(state, params.dmcLayer2, rng);
     
     //TODO
 
@@ -92,10 +92,10 @@ void FuzzyGlobalOptimizer::initializeCluster(DiscreteCluster& cluster, std::mt19
 
     float spawningRadius = params.spawningRadiusFactor * std::pow(params.numberOfAtoms, 0.33f);
 
-    setPointInBall(cluster, 2, 0, rng, spawningRadius, 0, 0, 0);
+    setPointInBall(cluster, 1, 0, rng, spawningRadius, 0, 0, 0);
     for (size_t i = 1; i < params.numberOfAtoms; i++) {
         do {
-            setPointInBall(cluster, 2, i, rng, spawningRadius, 0, 0, 0);
+            setPointInBall(cluster, 1, i, rng, spawningRadius, 0, 0, 0);
         } while (cluster.doesPointOverlap(i, i-1));
     }
 }
@@ -116,12 +116,12 @@ void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMC
         float sumActive = 0.f, sumTarget = 0.f;
         for (size_t i = 0; i < params.numberOfAtoms; i++)
         {
-            const float E = walker.getAtomEnergyAVX(i, lookup); // how are we gonna do neighbours here? 
+            const float E = walker.getAtomEnergyAVX(i, lookup);
             atomEnergies[i] = E;
             
-            const float wa = fast_exp(E * dmcParams.invActiveEnergy);
+            const float wa = std::exp(E * dmcParams.invActiveEnergy);
             const float d = E - dmcParams.targetEnergy;
-            const float wt = fast_exp(d * d * dmcParams.inv2Sigma2);
+            const float wt = std::exp(d * d * dmcParams.inv2Sigma2);
 
             activeWeights[i] = wa;
             targetWeights[i] = wt;
@@ -130,7 +130,7 @@ void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMC
             sumTarget += wt;
         }
 
-        // sample distributions, once for both
+        // sample the distributions, once for the target atom, once for the active atom
         float uniform = uniformDist(rng) * sumActive;
         float accumulate = 0.f;
         size_t activeAtom = 0;
@@ -148,7 +148,7 @@ void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMC
         }
 
         walker.copyTo(proposal);
-        setPointInBall(proposal, 1, activeAtom, rng, 1.0f, proposal.points[4*targetAtom], proposal.points[4*targetAtom+1], proposal.points[4*targetAtom+2], false); // TODO CRUCIAL somehow this should not put the point 1 next to any of the existing points
+        setPointInBall(proposal, 1, activeAtom, rng, 1.0f, proposal.points[4*targetAtom], proposal.points[4*targetAtom+1], proposal.points[4*targetAtom+2], false);
 
         localDiscreteFrozenOptimization(proposal, activeAtom);
 
@@ -158,7 +158,7 @@ void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMC
         if (deltaAtomEnergy < 0.0f || uniformDist(rng) < fast_exp(-deltaAtomEnergy * dmcParams.invAcceptanceEnergy)) {
             localDiscreteOptimization(proposal);
 
-            //TODO the cost of this could be removed, by modifying localDiscreteOptimization to keep track of the total sum of changes from improvements in getAtomEnergyAVX
+            //TODO the cost of this could be removed, by modifying localDiscreteOptimization to keep track of the total sum of changes from improvements in getAtomEnergyAVX. getAtomEnergyAVX uses the cutoff distance though, so be sure to only compare it to cluster energies that also used (the same) cutoff.
             // hence after localDiscreteOptimization, we would know how much the discreteOptimization steps (an swap) changed the walker cluster energy, saving us a clusterEnergy call at the cost of some float operations
             float candidateEnergy = proposal.getClusterEnergy(params.gridSpacingSquared); 
             
@@ -168,24 +168,24 @@ void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMC
                 std::cout << "DMC found: " << candidateEnergy << "\n";
                 stepsSinceImprovement = 0;
             }
-            walker = proposal; // copy data from proposal into walker, regardless of if proposal is a new best
+            proposal.copyTo(walker); // copy data from proposal into walker, regardless of if proposal is a new best
         }
     }
 }
 
 void FuzzyGlobalOptimizer::localDiscreteOptimization(DiscreteCluster& cluster) {
     std::list<size_t> activeList;
-    alignas(64) std::vector<std::vector<uint64_t>> neighbourLists;
+    alignas(64) std::vector<std::pair<std::vector<uint64_t>, uint64_t>> neighboursLists;
 
     const int32_t squaredCutoffDistance = params.cutoffDistance * params.cutoffDistance;
 
     for (size_t i = 0; i < cluster.n; i++) {
         activeList.emplace_back(i);
-        neighbourLists.emplace_back(cluster.getNeighbours(i,squaredCutoffDistance));
+        neighboursLists.emplace_back(cluster.getNeighbours(i,squaredCutoffDistance));
     }
 
     while (!activeList.empty())
-        activeList.remove_if([&cluster, &neighbourLists, this](int i){ return localDiscreteFrozenOptimization(cluster, i, neighbourLists[i]) == 0; });
+        activeList.remove_if([&cluster, &neighboursLists, this](int i){ return localDiscreteFrozenOptimization(cluster, i, neighboursLists[i]) == 0; });
 }
 
 void FuzzyGlobalOptimizer::localRealOptimization(std::pair<Cluster, float>& candidate) {
@@ -279,7 +279,7 @@ void FuzzyGlobalOptimizer::setPointOnSphere(DiscreteCluster& cluster, int spacin
     cluster.points[4*index+2] = cz + dz;
 }
 
-size_t FuzzyGlobalOptimizer::localDiscreteFrozenOptimization(DiscreteCluster& cluster, const size_t freeIndex, const std::vector<uint64_t>& neighbours) {
+size_t FuzzyGlobalOptimizer::localDiscreteFrozenOptimization(DiscreteCluster& cluster, const size_t freeIndex, const std::pair<std::vector<uint64_t>, uint64_t>& neighbours) {
     float oldAtomEnergy = cluster.getAtomEnergyAVX(freeIndex, neighbours, lookup);
     int stepsSinceChange, numChanges, axis;
     stepsSinceChange = numChanges = axis = 0;
