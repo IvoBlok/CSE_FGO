@@ -3,6 +3,7 @@
 
 #include "json.hpp"
 #include "FGO.hpp"
+#include <mpi.h>
 
 const float clusterBestEnergies[151] = {
     0.f,  // Placeholder for index 0 (no cluster with 0 atoms)
@@ -158,132 +159,56 @@ const float clusterBestEnergies[151] = {
     -893.310258f   // 150 atoms
 };
 
-using json = nlohmann::json;
-
-json create_points_json(size_t n, const std::vector<float>& xs, const std::vector<float>& ys, const std::vector<float>& zs) {
-    json points_array = json::array();
-    
-    for (size_t i = 0; i < n; i++) {
-        points_array.push_back({
-            {"x", xs[i]},
-            {"y", ys[i]},
-            {"z", zs[i]}
-        });
-    }
-    
-    return points_array;
-}
-
-json create_points_json(size_t n, const std::vector<int16_t>& points, float gridspacing) {
-    json points_array = json::array();
-    
-    for (size_t i = 0; i < n; i++) {
-        points_array.push_back({
-            {"x", gridspacing * points[4*i]},
-            {"y", gridspacing * points[4*i+1]},
-            {"z", gridspacing * points[4*i+2]}
-        });
-    }
-    
-    return points_array;
-}
-
-void to_json(json& j, const Cluster& cluster) {
-    j = json{{"points", create_points_json(cluster.n, cluster.x, cluster.y, cluster.z)}};
-}
-
-void to_json(json& j, const DiscreteCluster& cluster) {
-    j = json{{"points", create_points_json(cluster.n, cluster.points, 0.02f)}};
-}
-
-void to_json(json& j, const SingleRunResult& result) {
-    j = json{
-        {"discCandidates", result.discCandidates},
-        {"contCandidates", result.contCandidates},
-        {"totalTime", result.totalTime.count()},
-        {"dmc1Time", result.dmc1Time.count()},
-        {"dmc2Time", result.dmc2Time.count()},
-        {"realOptTime", result.realOptTime.count()}
-    };
-}
-
-void to_json(json& j, const MultiRunResult& result) {
-    j = json{
-        {"allRuns", result.allRuns},
-    };
-}
-
-struct BenchmarkResult {
-    struct NResult {
-        MultiRunResult multiRunResult;
-        int n;
-        float exactSolution;
-    };
-    
-    std::vector<NResult> allNResults;
-    std::chrono::microseconds totalBenchmarkTime{0};
-    std::string timestamp;
-};
-
-void to_json(json& j, const BenchmarkResult::NResult& nResult) {
-    j = json{
-        {"multiRunResult", nResult.multiRunResult},
-        {"n", nResult.n},
-        {"exactSolution", nResult.exactSolution}
-    };
-}
-
-void to_json(json& j, const BenchmarkResult& benchmark) {
-    j = json{
-        {"allNResults", benchmark.allNResults},
-        {"totalBenchmarkTime", benchmark.totalBenchmarkTime.count()},
-        {"timestamp", benchmark.timestamp}
-    };
-}
-
 int main(int argc, char** argv) {
-    auto startTime = std::chrono::high_resolution_clock::now();
-    
-    BenchmarkResult benchmarkResult;
-    
+
+    MPI_Init(&argc, &argv);
+
+    int rank, totalCores;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &totalCores);
+
     const int NUM_RUNS = 100;
-    const int MIN_N = 2;
-    const int MAX_N = 60;
-    
-    for (int n = MIN_N; n <= MAX_N; n++) {
-        std::cout << "Testing N = " << n << "..." << std::endl;
-        
+
+    for (size_t n = 0; n < 60; n++)
+    {
+        auto startTime = std::chrono::high_resolution_clock::now();
+        int localSampleCount = NUM_RUNS / totalCores;
+        int remainder = NUM_RUNS % totalCores;
+
+        if (rank < remainder) localSampleCount++;
+
         FGOParameters params;
         params.numberOfAtoms = n;
-        
+
         FuzzyGlobalOptimizer optimizer(params);
-        
-        auto multiResult = optimizer.runMultiple(NUM_RUNS);
-        
-        BenchmarkResult::NResult nResult;
-        nResult.multiRunResult = std::move(multiResult);
-        nResult.exactSolution = clusterBestEnergies[n];
-        nResult.n = n;
-        benchmarkResult.allNResults.push_back(nResult);
+        auto multiResult = optimizer.runMultiple(localSampleCount);
+
+        int correctFinds = 0;
+        for (const auto& run : multiResult.allRuns) {
+            for (const auto& candidate : run.contCandidates)
+            {
+                if (candidate.second < clusterBestEnergies[n] + 1e-3) {
+                    correctFinds++;
+                    break;
+                }
+            }
+        }
+        int globalSuccessfullFinds = 0;
+        MPI_Reduce(&correctFinds, &globalSuccessfullFinds, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+
+        MPI_Barrier(MPI_COMM_WORLD);
+        auto endTime = std::chrono::high_resolution_clock::now();
+        if (rank == 0) {
+            auto timeSpent = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count() / 1e6;
+            std::cout << "========== " << n << " ==========";
+            std::cout << "Average wall-clock time per sample for N=" << n << ": " << timeSpent / NUM_RUNS << "s\n";
+            std::cout << "Total time spent: " << timeSpent << "s\n";
+            std::cout << "Approximate time required for global minimum: " << timeSpent / globalSuccessfullFinds << "s\n";
+            std::cout << "Found global minimum " << globalSuccessfullFinds << " out of " << NUM_RUNS << " attempts\n";
+        }
     }
-    
-    auto endTime = std::chrono::high_resolution_clock::now();
-    benchmarkResult.totalBenchmarkTime = 
-        std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);
-    
-    // add timestamp
-    auto now = std::chrono::system_clock::now();
-    auto now_c = std::chrono::system_clock::to_time_t(now);
-    std::ostringstream oss;
-    oss << std::put_time(std::localtime(&now_c), "%Y-%m-%d %H:%M:%S");
-    benchmarkResult.timestamp = oss.str();
-    
-    // save to JSON file
-    json j = benchmarkResult;
-    std::ofstream file("benchmark_results.json");
-    file << j.dump(2);
-    
-    std::cout << "\nBenchmark completed in " << benchmarkResult.totalBenchmarkTime.count() / 1e6 << " seconds\n";
-    std::cout << "Results saved to benchmark_results.json\n";
+
+    MPI_Finalize();
+
     return 0;
 }

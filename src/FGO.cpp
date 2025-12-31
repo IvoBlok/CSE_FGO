@@ -182,7 +182,28 @@ void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMC
 
         float deltaAtomEnergy = proposal.getAtomEnergyAVX(activeAtom, lookup) - atomEnergies[activeAtom];
 
-        stepsSinceImprovement++;
+        /* // this version is slightly different from the one used up to this point; arguably this is more inline with the likely intention from the paper; But success rate is roughly the same and computational cost skyrockets with it (more candidates)
+        bool improved = (deltaAtomEnergy < 0.0f || uniformDist(rng) < std::exp(-deltaAtomEnergy * dmcParams.invAcceptanceEnergy));
+        if (improved) {
+            //std::cout << (deltaAtomEnergy < 0.0f) << " | " << deltaAtomEnergy << " | " << state.discCandidates.size() << " | " << stepsSinceImprovement << "\n";
+            // the cluster is accepted, but the steps since improvement only resets if this new candidate was better then our best ever so far
+            localDiscreteOptimization(proposal);
+            float candidateEnergy = proposal.getClusterEnergy(params.gridSpacingSquared);
+            state.discCandidates.emplace_back(proposal, candidateEnergy);
+            proposal.copyTo(walker);
+
+            if(candidateEnergy < state.discCandidates[state.bestDiscrete].second) {
+                stepsSinceImprovement = 0; // reset: improvement found
+                state.bestDiscrete = state.discCandidates.size() - 1;
+            } else {
+                stepsSinceImprovement += 1; // accepted, but no improvement to best
+            }
+
+        } else {
+            stepsSinceImprovement += 1; // rejected move
+        }
+        */
+        
         if (deltaAtomEnergy < 0.0f || uniformDist(rng) < std::exp(-deltaAtomEnergy * dmcParams.invAcceptanceEnergy)) {
             localDiscreteOptimization(proposal);
 

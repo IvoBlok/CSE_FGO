@@ -78,7 +78,6 @@ private:
     struct RunState {
         std::vector<std::pair<DiscreteCluster, float>> discCandidates;
         std::vector<std::pair<Cluster, float>> contCandidates;
-        size_t bestContinuous;
         
         DiscreteCluster DMCWalker;
     };
