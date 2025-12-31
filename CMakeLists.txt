@@ -25,14 +25,14 @@ target_compile_options(main PRIVATE
         -fno-math-errno
     >
 )
-target_link_options(main PRIVATE -flto -s)
+target_link_options(main PRIVATE -s)
 target_link_libraries(main PRIVATE ${CMAKE_THREAD_LIBS_INIT})
 
 # debug build
-add_executable(main_debug src/main.cpp ${COMMON_SOURCES})
-target_compile_options(main_debug PRIVATE
+add_executable(mainDebug src/main.cpp ${COMMON_SOURCES})
+target_compile_options(mainDebug PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:
-        -O0
+        -Og
         -g3
         -march=native
         -mavx512f
@@ -45,5 +45,5 @@ target_compile_options(main_debug PRIVATE
         -fno-optimize-sibling-calls
     >
 )
-target_link_options(main_debug PRIVATE -g)
-target_link_libraries(main_debug PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+target_link_options(mainDebug PRIVATE -g)
+target_link_libraries(mainDebug PRIVATE ${CMAKE_THREAD_LIBS_INIT})
