@@ -237,7 +237,7 @@ int main(int argc, char** argv) {
 
     const int NUM_RUNS = 100;
 
-    for (size_t n = 0; n < 100; n++)
+    for (size_t n = 0; n < 30; n++)
     {
         auto startTime = std::chrono::high_resolution_clock::now();
         int localSampleCount = NUM_RUNS / totalCores;

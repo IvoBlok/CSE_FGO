@@ -21,6 +21,12 @@ PROFILING
 I now use perf and hotspot. So for example gather data with 'perf record --call-graph dwarf ./main_debug', then run 'hotspot' to get the results.
 Alternatively use the GUI in (sudo) hotspot; Framepoint is probably the nicest mode. 
 
+For profiling the parallel executable, I use VTune:
+    
+    source /opt/intel/oneapi/setvars.sh
+    mpirun -np 16 vtune -collect hotspots -knob enable-characterization-insights=false -r vTuneResults -- ./mainMPIDebug
+    vtune-gui <results_directory>
+
 TODO
 =========
  - Investigate the lower success percentage compared to the paper results

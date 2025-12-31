@@ -22,13 +22,28 @@ target_compile_options(main PRIVATE
         -mfma
         -ffast-math
         -funroll-loops
-        -flto
         -fno-math-errno
         -fassociative-math
     >
 )
-target_link_options(main PRIVATE -flto -s)
+target_link_options(main PRIVATE -s)
 target_link_libraries(main PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+
+# debug build
+add_executable(mainDebug src/main.cpp ${COMMON_SOURCES})
+target_compile_options(mainDebug PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:
+        -Og
+        -g3
+        -march=native
+        -mavx2
+        -mfma
+        -fno-omit-frame-pointer
+        -fno-optimize-sibling-calls
+    >
+)
+target_link_options(mainDebug PRIVATE -g)
+target_link_libraries(mainDebug PRIVATE ${CMAKE_THREAD_LIBS_INIT})
 
 # main MPI (parallel performance) build
 add_executable(mainMPI src/mainMPI.cpp ${COMMON_SOURCES})
@@ -40,17 +55,16 @@ target_compile_options(mainMPI PRIVATE
         -mfma
         -ffast-math
         -funroll-loops
-        -flto
         -fno-math-errno
         -fassociative-math
     >
 )
-target_link_options(mainMPI PRIVATE -flto -s)
+target_link_options(mainMPI PRIVATE -s)
 target_link_libraries(mainMPI PRIVATE ${MPI_CXX_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
 
-# debug build
-add_executable(main_debug src/main.cpp ${COMMON_SOURCES})
-target_compile_options(main_debug PRIVATE
+# debug MPI (parallel performance) build
+add_executable(mainMPIDebug src/mainMPI.cpp ${COMMON_SOURCES})
+target_compile_options(mainMPIDebug PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:
         -Og
         -g3
@@ -61,5 +75,4 @@ target_compile_options(main_debug PRIVATE
         -fno-optimize-sibling-calls
     >
 )
-target_link_options(main_debug PRIVATE -g)
-target_link_libraries(main_debug PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(mainMPIDebug PRIVATE ${MPI_CXX_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
