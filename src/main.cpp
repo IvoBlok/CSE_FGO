@@ -2,6 +2,8 @@
 #include <fstream>
 
 #include "json.hpp"
+using json = nlohmann::json;
+
 #include "FGO.hpp"
 
 const float clusterBestEnergies[151] = {
@@ -158,7 +160,17 @@ const float clusterBestEnergies[151] = {
     -893.310258f   // 150 atoms
 };
 
-using json = nlohmann::json;
+struct BenchmarkResult {
+    struct NResult {
+        std::vector<SingleRunResult> multiRunResult;
+        int n;
+        float exactSolution;
+    };
+    
+    std::vector<NResult> allNResults;
+    std::chrono::microseconds totalBenchmarkTime{0};
+    std::string timestamp;
+};
 
 void to_json(json& j, const SingleRunResult& result) {
     std::vector<float> discCandidatesSecond;
@@ -182,24 +194,6 @@ void to_json(json& j, const SingleRunResult& result) {
         {"realOptTime", result.realOptTime.count()}
     };
 }
-
-void to_json(json& j, const MultiRunResult& result) {
-    j = json{
-        {"allRuns", result.allRuns},
-    };
-}
-
-struct BenchmarkResult {
-    struct NResult {
-        MultiRunResult multiRunResult;
-        int n;
-        float exactSolution;
-    };
-    
-    std::vector<NResult> allNResults;
-    std::chrono::microseconds totalBenchmarkTime{0};
-    std::string timestamp;
-};
 
 void to_json(json& j, const BenchmarkResult::NResult& nResult) {
     j = json{

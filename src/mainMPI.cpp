@@ -184,7 +184,7 @@ int main(int argc, char** argv) {
         auto multiResult = optimizer.runMultiple(localSampleCount);
 
         int correctFinds = 0;
-        for (const auto& run : multiResult.allRuns) {
+        for (const auto& run : multiResult) {
             for (const auto& candidate : run.contCandidates)
             {
                 if (candidate.second < clusterBestEnergies[n] + 1e-3) {
@@ -199,13 +199,12 @@ int main(int argc, char** argv) {
         MPI_Barrier(MPI_COMM_WORLD);
         auto endTime = std::chrono::high_resolution_clock::now();
         if (rank == 0) {
-            //auto timeSpent = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count() / 1e6;
-            //std::cout << "========== " << n << " ==========";
-            //std::cout << "Average wall-clock time per sample for N=" << n << ": " << timeSpent / NUM_RUNS << "s\n";
-            //std::cout << "Total time spent: " << timeSpent << "s\n";
-            //std::cout << "Approximate time required for global minimum: " << timeSpent / globalSuccessfullFinds << "s\n";
-            //std::cout << "Found global minimum " << globalSuccessfullFinds << " out of " << NUM_RUNS << " attempts\n";
-            std::cout << n << ": " << globalSuccessfullFinds * 1.0f << ", ";
+            auto timeSpent = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count() / 1e6;
+            std::cout << "\n========== " << n << " ==========";
+            std::cout << "Average wall-clock time per sample for N=" << n << ": " << timeSpent / NUM_RUNS << "s\n";
+            std::cout << "Total time spent: " << timeSpent << "s\n";
+            std::cout << "Approximate time required for global minimum: " << timeSpent / globalSuccessfullFinds << "s\n";
+            std::cout << "Found global minimum " << globalSuccessfullFinds << " out of " << NUM_RUNS << " attempts\n";
             std::cout.flush();
         }
     }

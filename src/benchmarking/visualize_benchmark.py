@@ -51,13 +51,13 @@ def extract_plot_data(data):
             'exact': None
         }
 
-        multi_run_result = n_result.get('multiRunResult', {})
+        multi_run_result = n_result.get('multiRunResult', [])
         
         n_data['exact'] = n_result.get('exactSolution')
+        n_data['samplesize'] = len(multi_run_result)
         n_data['correct'] = 0
-        n_data['samplesize'] = len(multi_run_result.get('allRuns', []))
 
-        for single_run in multi_run_result.get('allRuns', []):
+        for single_run in multi_run_result:
             total = single_run.get('totalTime') / 1e6
             dmc1 = single_run.get('dmc1Time') / 1e6
             dmc2 = single_run.get('dmc2Time') / 1e6

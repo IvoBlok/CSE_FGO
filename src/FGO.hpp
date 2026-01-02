@@ -37,6 +37,7 @@ struct FGOParameters {
             invAcceptanceEnergy(1.0f / acceptanceEnergy),
             convergenceFactor(convergenceFactor) {}
     };
+
     DMCParameters dmcLayer1 = DMCParameters(1.0f, -4.1f, 1.25f, 0.4f, 2.5f);
     DMCParameters dmcLayer2 = DMCParameters(1.0f, -11.0f, 1.3f, 0.3f, 1.5f);
 
@@ -57,12 +58,6 @@ struct SingleRunResult {
     std::chrono::microseconds realOptTime{0};
 };
 
-struct MultiRunResult {
-    std::vector<SingleRunResult> allRuns;
-
-    // optionally more, for debug / performance analysis or just statistics across the runs
-};
-
 
 class FuzzyGlobalOptimizer {
 private: 
@@ -78,8 +73,6 @@ private:
     struct RunState {
         std::vector<std::pair<DiscreteCluster, float>> discCandidates;
         std::vector<std::pair<Cluster, float>> contCandidates;
-        
-        DiscreteCluster DMCWalker;
     };
 
     RealLJCalculator fastLJ;
@@ -90,18 +83,19 @@ public:
     SingleRunResult runSingle();
     SingleRunResult runSingle(std::mt19937& rng);
     SingleRunResult runSingleWithSeed(uint32_t seed);
-
-    MultiRunResult runMultiple(size_t numRuns);
+    std::vector<SingleRunResult> runMultiple(size_t numRuns);
 
 private: 
-    void initializeCluster(DiscreteCluster& cluster, std::mt19937& rng);
-    void runDMCLayer(RunState& state, const FGOParameters::DMCParameters& dmcParams, std::mt19937& rng);
-    void localDiscreteOptimization(DiscreteCluster& cluster);
-    void localRealOptimization(std::pair<Cluster, float>& candidate);
+    std::chrono::microseconds initializeCluster(DiscreteCluster& cluster, std::mt19937& rng);
+    std::chrono::microseconds runDMCLayer(RunState& state, const DiscreteCluster& startCluster, const FGOParameters::DMCParameters& dmcParams, std::mt19937& rng);
+    std::chrono::microseconds runRealOptimization(RunState& state, const float acceptanceThreshold);
 
     // helper functions for the main algorithm steps above
     void setPointInBall(DiscreteCluster& cluster, size_t index, std::mt19937& rng, float radius, int16_t cx, int16_t cy, int16_t cz, bool allowZero = true);
     void setPointOnSphere(DiscreteCluster& cluster, size_t index, std::mt19937& rng, float radius, int16_t cx, int16_t cy, int16_t cz);
+
+    void localDiscreteOptimization(DiscreteCluster& cluster);
+    void localRealOptimization(std::pair<Cluster, float>& candidate);
 
     size_t localDiscreteFrozenOptimization(DiscreteCluster& cluster, const size_t freeIndex, const std::pair<std::vector<uint64_t>, uint64_t>& neighbours);
     size_t localDiscreteFrozenOptimization(DiscreteCluster& cluster, const size_t freeIndex);
