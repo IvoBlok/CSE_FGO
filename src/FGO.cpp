@@ -149,7 +149,7 @@ std::chrono::microseconds FuzzyGlobalOptimizer::runDMCLayer(RunState& state, con
             if (uniform <= accumulate) break;
         }
 
-        walker.copyTo(proposal);
+        proposal = walker;
         setPointInBall(proposal, activeAtom, rng, 1.0f, proposal.points[4*targetAtom], proposal.points[4*targetAtom+1], proposal.points[4*targetAtom+2]);
 
         localDiscreteFrozenOptimization(proposal, activeAtom);
@@ -183,7 +183,7 @@ std::chrono::microseconds FuzzyGlobalOptimizer::runRealOptimization(RunState& st
     {
         if (energy < state.discCandidates.back().second + acceptanceThreshold) {
             auto& contCandidate = state.contCandidates.emplace_back(Cluster(cluster, params.gridSpacing), std::numeric_limits<float>::infinity());
-            contCandidate.second = contCandidate.first.getClusterEnergyAVX(fastLJ);
+            contCandidate.second = contCandidate.first.getClusterEnergyAVX();
             localRealOptimization(contCandidate);
         }
     }
@@ -238,7 +238,7 @@ void FuzzyGlobalOptimizer::localDiscreteOptimization(DiscreteCluster& cluster) {
     const int32_t squaredCutoffDistance = params.cutoffDistance * params.cutoffDistance;
     
     for (size_t i = 0; i < cluster.n; i++) {
-        activeList.emplace_back(i);
+        activeList.push_back(i);
         neighboursLists.emplace_back(cluster.getNeighbours(i,squaredCutoffDistance));
     }
 
@@ -261,7 +261,7 @@ void FuzzyGlobalOptimizer::localRealOptimization(std::pair<Cluster, float>& cand
 
     for (size_t iter = 0; iter < params.maxRealOptimizationIterations; iter++)
     {
-        cluster.getClusterGradient(gradX, gradY, gradZ, fastLJ);
+        cluster.getClusterGradient(gradX, gradY, gradZ);
 
         // line search
         for (size_t i = 0; i < n; ++i) {
@@ -275,8 +275,8 @@ void FuzzyGlobalOptimizer::localRealOptimization(std::pair<Cluster, float>& cand
         }
 
         const float E0 = candidate.second;
-        const float E1 = gradCluster1.getClusterEnergyAVX(fastLJ);
-        const float E2 = gradCluster2.getClusterEnergyAVX(fastLJ);
+        const float E1 = gradCluster1.getClusterEnergyAVX();
+        const float E2 = gradCluster2.getClusterEnergyAVX();
         
         // interpolate quadratic equation
         const float denom = 2.0f * E2 - 4.0f * E1 + 2.0f * E0;
@@ -292,7 +292,7 @@ void FuzzyGlobalOptimizer::localRealOptimization(std::pair<Cluster, float>& cand
         }
 
         // convergence condition
-        candidate.second = cluster.getClusterEnergyAVX(fastLJ);
+        candidate.second = cluster.getClusterEnergyAVX();
         if (std::abs(candidate.second - E0) < 1e-12f) break;
     }
 }

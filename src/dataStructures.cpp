@@ -143,7 +143,7 @@ std::pair<std::vector<uint64_t>, uint64_t> DiscreteCluster::getNeighbours(uint64
 
         const int32_t r2 = dx*dx + dy*dy + dz*dz;
         if(r2 < squaredCutoff)
-            neighbours.emplace_back(i);
+            neighbours.push_back(i);
     }
 
     // ensure the vector has a length of 8, where the padding is filled with atomIndex, such that later getAtomEnergyAVX can safely load blocks of 8 neighbours at a time
@@ -152,7 +152,7 @@ std::pair<std::vector<uint64_t>, uint64_t> DiscreteCluster::getNeighbours(uint64
     if (remainder != 0) {
         size_t padding = 8 - remainder;
         for (size_t i = 0; i < padding; i++)
-            neighbours.emplace_back(atomIndex);
+            neighbours.push_back(atomIndex);
     }
 
     return {neighbours, trueNeighbourCount};
@@ -165,13 +165,6 @@ bool DiscreteCluster::doesPointOverlap(uint64_t atomIndex, uint64_t maxIncludedI
             return true;
     }
     return false;
-}
-
-void DiscreteCluster::copyTo(DiscreteCluster& otherCluster) const {
-    otherCluster.points = points;
-    otherCluster.n = n;
-    otherCluster.nPadded = nPadded;
-    otherCluster.squaredCutoffSIMD = squaredCutoffSIMD;
 }
 
 
@@ -190,12 +183,6 @@ Cluster::Cluster(const DiscreteCluster& discreteCluster, float gridSpacing) : Cl
     }
 }
 
-void Cluster::setPoint(const size_t atomIndex, const float xVal, const float yVal, const float zVal) {
-    x[atomIndex] = xVal;
-    y[atomIndex] = yVal;
-    z[atomIndex] = zVal;
-}
-
 float Cluster::getDistanceSquared(const size_t atomIndex1, const size_t atomIndex2) const {
     const float dx = x[atomIndex1] - x[atomIndex2];
     const float dy = y[atomIndex1] - y[atomIndex2];
@@ -203,7 +190,7 @@ float Cluster::getDistanceSquared(const size_t atomIndex1, const size_t atomInde
     return dx*dx + dy*dy + dz*dz;
 }
 
-float Cluster::getAtomEnergyAVX(size_t atomIndex, const RealLJCalculator& lj) const {
+float Cluster::getAtomEnergyAVX(size_t atomIndex) const {
     alignas(32) float energiesArr[8];
 
     __m256 totalVec = _mm256_setzero_ps();
@@ -219,6 +206,7 @@ float Cluster::getAtomEnergyAVX(size_t atomIndex, const RealLJCalculator& lj) co
         __m256 zj = _mm256_loadu_ps(&z[j]);
 
         // compute squared distances
+        // ======================================
         __m256 dx = _mm256_sub_ps(xi, xj);
         __m256 dy = _mm256_sub_ps(yi, yj);
         __m256 dz = _mm256_sub_ps(zi, zj);
@@ -228,8 +216,24 @@ float Cluster::getAtomEnergyAVX(size_t atomIndex, const RealLJCalculator& lj) co
         dz = _mm256_mul_ps(dz, dz);
 
         __m256 r2 = _mm256_add_ps(dx, _mm256_add_ps(dy, dz));
-        __m256 energies = lj.potentialAVX(r2);
 
+        // calculate energies
+        // ======================================
+        // add small epsilon to all values to avoid division by zero
+        __m256 r2_safe = _mm256_add_ps(r2, _mm256_set1_ps(1e-10f));
+        
+        // approximate 1/r2 by rcp + a Newton-Raphson refinement step
+        __m256 inv_r2 = _mm256_rcp_ps(r2_safe);
+        inv_r2 = _mm256_mul_ps(inv_r2, _mm256_fnmadd_ps(r2_safe, inv_r2, _mm256_set1_ps(2.0f)));
+        
+        __m256 inv_r4 = _mm256_mul_ps(inv_r2, inv_r2);
+        __m256 inv_r6 = _mm256_mul_ps(inv_r4, inv_r2);
+        __m256 inv_r12 = _mm256_mul_ps(inv_r6, inv_r6);
+        
+        __m256 energies =  _mm256_fnmadd_ps(inv_r6, _mm256_set1_ps(2.0f), inv_r12);
+
+        // catch edgecases
+        // ======================================
         // if atomIndex is in this block, set its energy to 0
         if (atomIndex >= j && atomIndex < j + 8) {
             _mm256_store_ps(energiesArr, energies); 
@@ -249,16 +253,16 @@ float Cluster::getAtomEnergyAVX(size_t atomIndex, const RealLJCalculator& lj) co
     return horizontalSumAVX(totalVec);
 };
 
-float Cluster::getClusterEnergyAVX(const RealLJCalculator& lj) const {
+float Cluster::getClusterEnergyAVX() const {
     float total = 0.f;
 
     for (size_t i = 0; i < n; i++)
-        total += getAtomEnergyAVX(i, lj);
+        total += getAtomEnergyAVX(i);
 
     return total * 0.5f;
 }
 
-void Cluster::getClusterGradient(std::vector<float>& gradX, std::vector<float>& gradY, std::vector<float>& gradZ, const RealLJCalculator& lj) const {
+void Cluster::getClusterGradient(std::vector<float>& gradX, std::vector<float>& gradY, std::vector<float>& gradZ) const {
     if (gradX.size() < n || gradY.size() < n || gradZ.size() < n)
         throw std::invalid_argument("given gradient output vectors are of invalid size!");
     
@@ -279,7 +283,17 @@ void Cluster::getClusterGradient(std::vector<float>& gradX, std::vector<float>& 
             const float dz = zi - z[j];
 
             const float r2 = dx*dx + dy*dy + dz*dz;
-            float force = lj.force(r2);
+            
+            float force;
+            if (r2 < 1e-10f) {
+                force = std::numeric_limits<float>::infinity();
+            } else {
+                const float inv_r2 = 1.0f / r2;
+                const float inv_r6 = inv_r2 * inv_r2 * inv_r2;
+                const float inv_r8 = inv_r6 * inv_r2;
+                const float inv_r14 = inv_r8 * inv_r6;
+                force = 12.f * (inv_r8 - inv_r14);
+            }
             
             if (force > 1e10f) force = 1e10f;
             if (force < -1e10f) force = -1e10f;
@@ -293,12 +307,4 @@ void Cluster::getClusterGradient(std::vector<float>& gradX, std::vector<float>& 
             gradZ[j] -= dz * force;
         }
     }
-}
-
-void Cluster::copyTo(Cluster& otherCluster) const {
-    otherCluster.x = x;
-    otherCluster.y = y;
-    otherCluster.z = z;
-    otherCluster.n = n;
-    otherCluster.nPadded = nPadded;
 }

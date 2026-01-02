@@ -75,8 +75,6 @@ private:
         std::vector<std::pair<Cluster, float>> contCandidates;
     };
 
-    RealLJCalculator fastLJ;
-
 public:
     explicit FuzzyGlobalOptimizer(const FGOParameters& params);
 
