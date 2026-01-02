@@ -70,17 +70,17 @@ def extract_plot_data(data):
             n_data['other'].append(total - (dmc1 + dmc2 + real_opt))
 
             index = 0
-            for cluster in single_run.get('discCandidates', []):
+            for energy in single_run.get('discCandidates', []):
                 if (index == 0):
-                    n_data['start_energies'].append(cluster[1])
+                    n_data['start_energies'].append(energy)
                 else:
-                    n_data['dmc_energies'].append(cluster[1])
+                    n_data['dmc_energies'].append(energy)
                 index += 1
-            for cluster in single_run.get('contCandidates', []):
-                n_data['real_energies'].append(cluster[1])
+            for energy in single_run.get('contCandidates', []):
+                n_data['real_energies'].append(energy)
 
-            for cluster in single_run.get('contCandidates', []):
-                if (cluster[1] and cluster[1] < n_data['exact'] + 1e-3):
+            for energy in single_run.get('contCandidates', []):
+                if (energy and energy < n_data['exact'] + 1e-3):
                     n_data['correct'] += 1
                     break
 
@@ -227,7 +227,25 @@ def create_energy_boxplot(ax, plot_data):
 
     return ax
     
+def create_candidate_length_plot(ax, plot_data):
+    n_values = sorted(plot_data.keys())
 
+    avg_dmc_candidate_amount = []
+    avg_real_candidate_amount = []
+
+    for n in n_values:
+        data = plot_data[n]
+        avg_dmc_candidate_amount.append(len(data['dmc_energies']) / data['samplesize'])
+        avg_real_candidate_amount.append(len(data['real_energies']) / data['samplesize'])
+
+    ax.plot(n_values, avg_dmc_candidate_amount, label="avg #DMC candidates")
+    ax.plot(n_values, avg_real_candidate_amount, label="avg #real candidates")
+
+    ax.set_xlabel('N')
+    ax.set_title("Number of DMC / real candidates by N")
+
+    ax.legend(loc='upper left')
+    ax.grid(True, alpha=0.3)
 
 def main():
     json_file = parse_command_line()
@@ -249,10 +267,11 @@ def main():
         'font.family': 'DejaVu Sans'
     })
     
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(22, 10))
+    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(22, 10))
     
     ax1 = create_timing_plot(ax1, plot_data)
     ax2 = create_energy_boxplot(ax2, plot_data)
+    ax3 = create_candidate_length_plot(ax3, plot_data)
     
     fig.suptitle(f'FGO Benchmark Results - {data.get("timestamp", "")}', 
                  fontsize=16, fontweight='bold')

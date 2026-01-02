@@ -160,46 +160,22 @@ const float clusterBestEnergies[151] = {
 
 using json = nlohmann::json;
 
-json create_points_json(size_t n, const std::vector<float>& xs, const std::vector<float>& ys, const std::vector<float>& zs) {
-    json points_array = json::array();
-    
-    for (size_t i = 0; i < n; i++) {
-        points_array.push_back({
-            {"x", xs[i]},
-            {"y", ys[i]},
-            {"z", zs[i]}
-        });
-    }
-    
-    return points_array;
-}
-
-json create_points_json(size_t n, const std::vector<int16_t>& points, float gridspacing) {
-    json points_array = json::array();
-    
-    for (size_t i = 0; i < n; i++) {
-        points_array.push_back({
-            {"x", gridspacing * points[4*i]},
-            {"y", gridspacing * points[4*i+1]},
-            {"z", gridspacing * points[4*i+2]}
-        });
-    }
-    
-    return points_array;
-}
-
-void to_json(json& j, const Cluster& cluster) {
-    j = json{{"points", create_points_json(cluster.n, cluster.x, cluster.y, cluster.z)}};
-}
-
-void to_json(json& j, const DiscreteCluster& cluster) {
-    j = json{{"points", create_points_json(cluster.n, cluster.points, 0.02f)}};
-}
-
 void to_json(json& j, const SingleRunResult& result) {
+    std::vector<float> discCandidatesSecond;
+    discCandidatesSecond.reserve(result.discCandidates.size());
+    for (const auto& pair : result.discCandidates) {
+        discCandidatesSecond.push_back(pair.second);
+    }
+    
+    std::vector<float> contCandidatesSecond;
+    contCandidatesSecond.reserve(result.contCandidates.size());
+    for (const auto& pair : result.contCandidates) {
+        contCandidatesSecond.push_back(pair.second);
+    }
+
     j = json{
-        {"discCandidates", result.discCandidates},
-        {"contCandidates", result.contCandidates},
+        {"discCandidates", discCandidatesSecond},
+        {"contCandidates", contCandidatesSecond},
         {"totalTime", result.totalTime.count()},
         {"dmc1Time", result.dmc1Time.count()},
         {"dmc2Time", result.dmc2Time.count()},
@@ -248,7 +224,7 @@ int main(int argc, char** argv) {
     
     const int NUM_RUNS = 100;
     const int MIN_N = 2;
-    const int MAX_N = 60;
+    const int MAX_N = 40;
     
     for (int n = MIN_N; n <= MAX_N; n++) {
         std::cout << "Testing N = " << n << "..." << std::endl;
