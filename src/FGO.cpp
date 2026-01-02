@@ -69,6 +69,7 @@ SingleRunResult FuzzyGlobalOptimizer::runSingle(std::mt19937& rng) {
     state.DMCWalker = startCandidate.first;
     runDMCLayer(state, params.dmcLayer1, rng);
     auto endDMC1 = std::chrono::high_resolution_clock::now();
+    state.DMCWalker = state.discCandidates.back().first; // initialize DMC2 with the best candidate from DMC1
     runDMCLayer(state, params.dmcLayer2, rng);
     auto endDMC2 = std::chrono::high_resolution_clock::now();
 
@@ -137,40 +138,53 @@ void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMC
     std::vector<float> atomEnergies(params.numberOfAtoms);
     std::vector<float> activeWeights(params.numberOfAtoms);
     std::vector<float> targetWeights(params.numberOfAtoms);
+    float sumActive, sumTarget;
 
+    bool recomputeWeights = true;
 
     while (stepsSinceImprovement < (size_t)(params.numberOfAtoms * params.numberOfAtoms * dmcParams.convergenceFactor)) {
-        // calculate distribution weights
-        float sumActive = 0.f, sumTarget = 0.f;
-        for (size_t i = 0; i < params.numberOfAtoms; i++)
-        {
-            const float E = walker.getAtomEnergyAVX(i, lookup);
-            atomEnergies[i] = E;
-            
-            const float wa = std::exp(E * dmcParams.invActiveEnergy);
-            const float d = E - dmcParams.targetEnergy;
-            const float wt = std::exp(d * d * dmcParams.inv2Sigma2);
+        if (recomputeWeights) {
+            // calculate distribution weights
+            sumActive = 0;
+            sumTarget = 0;
+            for (size_t i = 0; i < params.numberOfAtoms; i++)
+            {
+                const float E = walker.getAtomEnergyAVX(i, lookup);
+                atomEnergies[i] = E;
+                
+                const float wa = std::exp(E * dmcParams.invActiveEnergy);
+                const float d = E - dmcParams.targetEnergy;
+                const float wt = std::exp(d * d * dmcParams.inv2Sigma2);
 
-            activeWeights[i] = wa;
-            targetWeights[i] = wt;
+                activeWeights[i] = wa;
+                targetWeights[i] = wt;
 
-            sumActive += wa;
-            sumTarget += wt;
+                sumActive += wa;
+                sumTarget += wt;
+            }
+            recomputeWeights = false;
         }
+
+        size_t activeAtom, targetAtom;
 
         // sample the distributions, once for the target atom, once for the active atom
         float uniform = uniformDist(rng) * sumActive;
         float accumulate = 0.f;
-        size_t activeAtom = 0;
-        for (; activeAtom < params.numberOfAtoms; activeAtom++) {
+        for (activeAtom = 0; activeAtom < params.numberOfAtoms; activeAtom++) {
             accumulate += activeWeights[activeAtom];
             if (uniform <= accumulate) break;
         }
 
+        /*
+        // ensure activeAtom != targetAtom
+        // it might actually be desirable to have activeAtom == targetAtom as a possibility; it could help avoid effectively infinite loops in a state where all changes from the walker are bad
+        float saved = targetWeights[activeAtom];
+        targetWeights[activeAtom] = 0.0f;
+        sumTarget -= saved;
+        */
         uniform = uniformDist(rng) * sumTarget;
         accumulate = 0.f;
-        size_t targetAtom = 0;
-        for (; targetAtom < params.numberOfAtoms; targetAtom++) {
+        for (targetAtom = 0; targetAtom < params.numberOfAtoms; targetAtom++) {
             accumulate += targetWeights[targetAtom];
             if (uniform <= accumulate) break;
         }
@@ -182,40 +196,20 @@ void FuzzyGlobalOptimizer::runDMCLayer(RunState& state, const FGOParameters::DMC
 
         float deltaAtomEnergy = proposal.getAtomEnergyAVX(activeAtom, lookup) - atomEnergies[activeAtom];
 
-        /* // this version is slightly different from the one used up to this point; arguably this is more inline with the likely intention from the paper; But success rate is roughly the same and computational cost skyrockets with it (more candidates)
-        bool improved = (deltaAtomEnergy < 0.0f || uniformDist(rng) < std::exp(-deltaAtomEnergy * dmcParams.invAcceptanceEnergy));
-        if (improved) {
-            //std::cout << (deltaAtomEnergy < 0.0f) << " | " << deltaAtomEnergy << " | " << state.discCandidates.size() << " | " << stepsSinceImprovement << "\n";
-            // the cluster is accepted, but the steps since improvement only resets if this new candidate was better then our best ever so far
+        if (deltaAtomEnergy < 0.0f || uniformDist(rng) < std::exp(-deltaAtomEnergy * dmcParams.invAcceptanceEnergy)) {
+            // accept move as new walker
+            recomputeWeights = true;
             localDiscreteOptimization(proposal);
-            float candidateEnergy = proposal.getClusterEnergy(params.gridSpacingSquared);
-            state.discCandidates.emplace_back(proposal, candidateEnergy);
             proposal.copyTo(walker);
 
-            if(candidateEnergy < state.discCandidates[state.bestDiscrete].second) {
-                stepsSinceImprovement = 0; // reset: improvement found
-                state.bestDiscrete = state.discCandidates.size() - 1;
-            } else {
-                stepsSinceImprovement += 1; // accepted, but no improvement to best
-            }
-
-        } else {
-            stepsSinceImprovement += 1; // rejected move
-        }
-        */
-        
-        if (deltaAtomEnergy < 0.0f || uniformDist(rng) < std::exp(-deltaAtomEnergy * dmcParams.invAcceptanceEnergy)) {
-            localDiscreteOptimization(proposal);
-
-            //TODO the cost of this could be removed, by modifying localDiscreteOptimization to keep track of the total sum of changes from improvements in getAtomEnergyAVX. getAtomEnergyAVX uses the cutoff distance though, so be sure to only compare it to cluster energies that also used (the same) cutoff.
-            // hence after localDiscreteOptimization, we would know how much the discreteOptimization steps (an swap) changed the walker cluster energy, saving us a clusterEnergy call at the cost of some float operations
             float candidateEnergy = proposal.getClusterEnergy(params.gridSpacingSquared); 
-            
-            if(candidateEnergy < state.discCandidates.back().second) { // the back is guaranteed to be the best
+
+            if(candidateEnergy < state.discCandidates.back().second) {
                 state.discCandidates.emplace_back(proposal, candidateEnergy);
                 stepsSinceImprovement = 0;
+            } else {
+                stepsSinceImprovement += 1;
             }
-            proposal.copyTo(walker); // TODO unsure of if this should be here (paper isn't very clear either, though I feel like it suggests the deeper if statement), but success rate is drastically better out here (so DMC is more explorative), so that's good enough for me
         }
     }
 }

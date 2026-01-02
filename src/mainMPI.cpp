@@ -167,9 +167,9 @@ int main(int argc, char** argv) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &totalCores);
 
-    const int NUM_RUNS = 100;
+    const int NUM_RUNS = 1000;
 
-    for (size_t n = 0; n < 60; n++)
+    for (size_t n = 0; n < 70; n++)
     {
         auto startTime = std::chrono::high_resolution_clock::now();
         int localSampleCount = NUM_RUNS / totalCores;
@@ -199,12 +199,14 @@ int main(int argc, char** argv) {
         MPI_Barrier(MPI_COMM_WORLD);
         auto endTime = std::chrono::high_resolution_clock::now();
         if (rank == 0) {
-            auto timeSpent = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count() / 1e6;
-            std::cout << "========== " << n << " ==========";
-            std::cout << "Average wall-clock time per sample for N=" << n << ": " << timeSpent / NUM_RUNS << "s\n";
-            std::cout << "Total time spent: " << timeSpent << "s\n";
-            std::cout << "Approximate time required for global minimum: " << timeSpent / globalSuccessfullFinds << "s\n";
-            std::cout << "Found global minimum " << globalSuccessfullFinds << " out of " << NUM_RUNS << " attempts\n";
+            //auto timeSpent = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count() / 1e6;
+            //std::cout << "========== " << n << " ==========";
+            //std::cout << "Average wall-clock time per sample for N=" << n << ": " << timeSpent / NUM_RUNS << "s\n";
+            //std::cout << "Total time spent: " << timeSpent << "s\n";
+            //std::cout << "Approximate time required for global minimum: " << timeSpent / globalSuccessfullFinds << "s\n";
+            //std::cout << "Found global minimum " << globalSuccessfullFinds << " out of " << NUM_RUNS << " attempts\n";
+            std::cout << n << ": " << globalSuccessfullFinds * 1.0f << ", ";
+            std::cout.flush();
         }
     }
 
