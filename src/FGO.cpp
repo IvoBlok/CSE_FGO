@@ -166,8 +166,8 @@ std::chrono::microseconds FuzzyGlobalOptimizer::runDMCLayer(RunState& state, con
                 stepsSinceImprovement = 0;
             }
         } else {
-            // reverse the change to walker
-            walker.updateAtom(activeAtom, oldPoint);
+            // reverse the change to the unchanged walker
+            walker.updateAtom(activeAtom, oldPoint); //TODO this can also largely be saved; modify 'localDiscreteFrozenOptimization' to not update the point at the end, but to return both the energy and final point; then only update if the E < 0 / metropolis hits, which is drastically less often then the reverse
         }
     }
 
