@@ -35,7 +35,7 @@ target_link_libraries(main PRIVATE ${CMAKE_THREAD_LIBS_INIT})
 add_executable(mainDebug src/main.cpp ${COMMON_SOURCES})
 target_compile_options(mainDebug PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:
-        -Og
+        -O0
         -g3
         -march=native
         -mavx512f

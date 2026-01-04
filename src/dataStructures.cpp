@@ -11,161 +11,231 @@
 
 // DiscreteCluster Implementation
 // ===================================================================================
-DiscreteCluster::DiscreteCluster() : n(0), nPadded(0), squaredCutoffSIMD(_mm512_setzero_si512()) {}
+DiscreteCluster::DiscreteCluster(
+    const size_t numberOfPoints, 
+    const std::vector<DiscreteCoord>& points,
+    int DISCRETE_RADIUS,
+    int CUTOFF2,
+    int CELL_SIZE
+) : n(numberOfPoints), CUTOFF2(CUTOFF2), CELL_SIZE(CELL_SIZE) {
+    const int SIMD_WIDTH = 16;
 
-DiscreteCluster::DiscreteCluster(const size_t numberOfPoints, const int32_t cutoffSIMD)
-     : points(4*((numberOfPoints + 7) & ~size_t(7))), 
-       n(numberOfPoints), 
-       nPadded((numberOfPoints + 7) & ~size_t(7)),
-       squaredCutoffSIMD(_mm512_set1_epi32(cutoffSIMD * cutoffSIMD)) {}
+    // find bounding box (with margin)
+    minX = -DISCRETE_RADIUS * 1.3;
+    maxX = -minX;
+    minY = -DISCRETE_RADIUS * 1.3;
+    maxY = -minY;
+    minZ = -DISCRETE_RADIUS * 1.3;
+    maxZ = -minZ;
 
-float DiscreteCluster::getAtomEnergyAVX(uint64_t atomIndex, const std::pair<std::vector<uint64_t>, uint64_t>& neighbours, const std::vector<float>& lookup) const {
-    // neighbours is required to have a multiple of 8 elements, where extra entries can be added by using the same index as that of the main atom.
-    // numNeighbours is the number of atoms that represent actual neighbours; the length of neighbours without the padding.
-    // TODO this might be improvable by loading 2 blocks of neighbours each iteration, combining them somehow at the squaredDistances step where currently only half of the elements are used (rest is 0). Then use a 32bit index gather instruction instead, such that we can gather twice the values in the one (expensive) gather instruction.
+    nx = (maxX - minX) / CELL_SIZE + 1;
+    ny = (maxY - minY) / CELL_SIZE + 1;
+    nz = (maxZ - minZ) / CELL_SIZE + 1;
 
-    __m256 energiesTotal = _mm256_setzero_ps();
-    __m256 lastEnergies = _mm256_setzero_ps();
-    __m512i atom = _mm512_set1_epi64(*reinterpret_cast<const int64_t*>(&points[4*atomIndex]));
+    const int numCells = nx * ny * nz;
 
-    for (size_t i = 0; i < neighbours.second; i+=8)
-    {
-        energiesTotal = _mm256_add_ps(energiesTotal, lastEnergies);
+    // count how many points will fall in each cell
+    std::vector<int> cellCounts(numCells, 0);
 
-        __m512i indices = _mm512_loadu_epi64(&neighbours.first[i]);
-        __m512i neighbourPoints = _mm512_i64gather_epi64(indices, points.data(), 8);
-
-        __m512i diff = _mm512_sub_epi16(atom, neighbourPoints);
-        __m512i squaredXY = _mm512_madd_epi16(diff, diff);
-
-        __m512i shiftedLeft = _mm512_alignr_epi32(squaredXY, squaredXY, 1);
-        __m512i squaredDistances = _mm512_add_epi32(squaredXY, shiftedLeft);
-        squaredDistances = _mm512_add_epi32(squaredDistances, _mm512_set1_epi32(1)); // add 1 to each squaredDistance entry; this is because the lookup is offset by 1. This gives an extra special value at lookup[0], which is useful to avoid extra computations when filtering distances that are outside the cutoff range
-        squaredDistances = _mm512_maskz_mov_epi32(0x5555, squaredDistances); // set every second element to zero, such that the next line can interpret it directly as 8 64bit (unsigned) ints
-        
-        // not all neighbours might still be within the cutoff range, and hence be in the range of the lookup array. So set any that go over the limit to 0, such that their energy contribution is 0.
-        // this is due to us keeping the same neighbours during discreteOptimization, while these neighbours do get moved, potentially out of the cutoff range they were selected with at the start.
-        __mmask16 outOfRangeMask = _mm512_cmpgt_epi32_mask(squaredCutoffSIMD, squaredDistances); // bit is 0 if the distance element is larger , 1 if smaller or equal
-        squaredDistances = _mm512_maskz_mov_epi32(outOfRangeMask, squaredDistances);
-
-        lastEnergies = _mm512_i64gather_ps(squaredDistances, lookup.data(), 4);
-    }
-    // remove energy contribution of the entries corresponding to padded neighbours
-    size_t padding = neighbours.first.size() - neighbours.second;
-    __mmask8 mask = (0xFF >> padding);
-    lastEnergies = _mm256_maskz_mov_ps(mask, lastEnergies);
-
-    energiesTotal = _mm256_add_ps(energiesTotal, lastEnergies);
-    return horizontalSumAVX(energiesTotal);
-}
-
-float DiscreteCluster::getAtomEnergyAVX(uint64_t atomIndex, const std::vector<float>& lookup) const {
-    __m256 energiesTotal = _mm256_setzero_ps();
-    __m256 lastEnergies = _mm256_setzero_ps();
-    __m512i atom = _mm512_set1_epi64(*reinterpret_cast<const int64_t*>(&points[4*atomIndex]));
-
-    for (size_t i = 0; i < nPadded; i += 8)
-    {
-        // this ordering, of only adding the energies of the last loop to the total at the start of the next loop, allows us to avoid any branches in the main loop.
-        // We can then, after the last iteration, when the block with irrelevant potential padded elements got done, remove those incorrect entries efficiently after the main loop.
-        energiesTotal = _mm256_add_ps(energiesTotal, lastEnergies);
-
-        __m512i pointData = _mm512_loadu_epi64(reinterpret_cast<const int64_t*>(&points[4*i]));
-
-        __m512i diff = _mm512_sub_epi16(atom, pointData);
-        __m512i squaredXY = _mm512_madd_epi16(diff, diff);
-        __m512i shiftedLeft = _mm512_alignr_epi32(squaredXY, squaredXY, 1);
-        __m512i squaredDistances = _mm512_add_epi32(squaredXY, shiftedLeft);
-        squaredDistances = _mm512_add_epi32(squaredDistances, _mm512_set1_epi32(1)); // add 1 to each squaredDistance entry; this is because the lookup is offset by 1. This gives an extra special value at lookup[0], which is useful to avoid extra computations when filtering distances that are outside the cutoff range
-        squaredDistances = _mm512_maskz_mov_epi32(0x5555, squaredDistances);
-
-        // only calculate energy for those within the cutoff range
-        __mmask16 outOfRangeMask = _mm512_cmpgt_epi32_mask(squaredCutoffSIMD, squaredDistances);
-        squaredDistances = _mm512_maskz_mov_epi32(outOfRangeMask, squaredDistances);
-
-        lastEnergies = _mm512_i64gather_ps(squaredDistances, lookup.data(), 4);
-
-        // remove the contribution between atomIndex and itself (+inf). 
-        // [1, 1, 1, 1, 1, 1, 1, 1] if atomIndex is not in the range[i, i+8]. Otherwise the (7 - atomIndex % 8) element is 0. 
-        __mmask8 selfMask = (atomIndex >= i && atomIndex < i + 8) ? (0xFF ^ (1 << (atomIndex % 8))) : 0xFF;
-        lastEnergies = _mm256_maskz_mov_ps(selfMask, lastEnergies);
-    }
-    
-    // remove energy contribution of the entries corresponding to padded points
-    size_t padding = nPadded - n;
-    __mmask8 mask = (0xFF >> padding);
-    lastEnergies = _mm256_maskz_mov_ps(mask, lastEnergies);
-
-    energiesTotal = _mm256_add_ps(energiesTotal, lastEnergies);
-    return horizontalSumAVX(energiesTotal);
-}
-
-float DiscreteCluster::getClusterEnergy(float gridSpacingSquared) const {
-    //TODO slow? basic (exact) implementation to get cluster energy. 
-    // this again assumes no two distinct points in the cluster sit on the same point (woul)
-    float totalEnergy = 0.0f;
+    auto cellIndex = [&](DiscreteCoord point) {
+        int cx = (point[0] - minX) / CELL_SIZE;
+        int cy = (point[1] - minY) / CELL_SIZE;
+        int cz = (point[2] - minZ) / CELL_SIZE;
+        return (cx * ny + cy) * nz + cz;
+    };
 
     for (size_t i = 0; i < n; i++)
     {
-        for (size_t j = i + 1; j < n; j++)
-        {
-            const int32_t dx = points[4*i] - points[4*j];
-            const int32_t dy = points[4*i+1] - points[4*j+1];
-            const int32_t dz = points[4*i+2] - points[4*j+2];
+        int c = cellIndex(points[i]);
+        cellCounts[c]++;
+    }
 
-            const int32_t sum = dx*dx + dy*dy + dz*dz;
-            if (sum == 0)
-                return std::numeric_limits<float>::infinity();
+    // build cells (without point data)
+    cells.resize(numCells);
+    
+    int offset = 0;
+    for (size_t c = 0; c < numCells; c++)
+    {
+        int count = cellCounts[c];
+        int padded = (count + SIMD_WIDTH - 1) & ~(SIMD_WIDTH - 1); // add padding to ensure the length of each cell is a multiple of 16
+        padded += SIMD_WIDTH; //TODO this is likely overkill; typical efficient packings would have maybe 12 points in the cell volume; so that'd be pretty nice (leaves a few spots of padding up to the full 16 for non-optimal crammed cells / rotated packings). Though probably for this to be effective, we should ensure that the starting cluster is already decent enough for this atoms per cell to be about 14 or less
 
-            const float invr2 = 1.0f/(gridSpacingSquared * sum);
-
-            const float invr6 = invr2 * invr2 * invr2;
-            totalEnergy += invr6 * invr6 - 2 * invr6;
-        }
+        cells[c].start = offset;
+        cells[c].count = padded;
+        offset += padded;
     }
     
-    return totalEnergy;
-}
+    // fill cell arrays with usefull point data
+    cellX.resize(offset);
+    cellY.resize(offset);
+    cellZ.resize(offset);
+    cellID.resize(offset);
 
-std::pair<std::vector<uint64_t>, uint64_t> DiscreteCluster::getNeighbours(uint64_t atomIndex, uint32_t squaredCutoff) const {
-    std::vector<uint64_t> neighbours;
-
-    const int16_t xi = points[4*atomIndex+0];
-    const int16_t yi = points[4*atomIndex+1];
-    const int16_t zi = points[4*atomIndex+2];
-
-    for (uint64_t i = 0; i < n; i++)
+    atomIndices.resize(n);
+    
+    std::vector<int> writeCursor(numCells, 0); // use a temporary vector to keep track of how many entries have been put into each cell 'block' of point data
+    for (size_t i = 0; i < n; i++)
     {
-        if(i == atomIndex) continue; // skip self
-        const int32_t dx = xi - points[4*i+0];
-        const int32_t dy = yi - points[4*i+1];
-        const int32_t dz = zi - points[4*i+2];
+        int c = cellIndex(points[i]);
+        int index = cells[c].start + writeCursor[c]++;
 
-        const int32_t r2 = dx*dx + dy*dy + dz*dz;
-        if(r2 < squaredCutoff)
-            neighbours.push_back(i);
+        cellX[index] = points[i][0];
+        cellY[index] = points[i][1];
+        cellZ[index] = points[i][2];
+        cellID[index] = static_cast<int32_t>(i);
+        atomIndices[i] = index;
     }
-
-    // ensure the vector has a length of 8, where the padding is filled with atomIndex, such that later getAtomEnergyAVX can safely load blocks of 8 neighbours at a time
-    size_t trueNeighbourCount = neighbours.size();
-    size_t remainder = trueNeighbourCount % 8;
-    if (remainder != 0) {
-        size_t padding = 8 - remainder;
-        for (size_t i = 0; i < padding; i++)
-            neighbours.push_back(atomIndex);
-    }
-
-    return {neighbours, trueNeighbourCount};
-}
-
-bool DiscreteCluster::doesPointOverlap(uint64_t atomIndex, uint64_t maxIncludedIndex) const {
-    for (uint64_t i = 0; i <= maxIncludedIndex; i++)
+    
+    // fill padded elements with data such that they are ignored in energy calculation
+    for (int c = 0; c < numCells; c++)
     {
-        if(points[4*atomIndex] - points[4*i] == 0 && points[4*atomIndex+1] - points[4*i+1] == 0 && points[4*atomIndex+2] - points[4*i+2] == 0)
-            return true;
+        int start = cells[c].start;
+        int realCount = writeCursor[c];
+        int padded = cells[c].count;
+
+        for (int i = writeCursor[c]; i < cells[c].count; i++)
+        {
+            int index = cells[c].start + i;
+            cellX[index] = 1 << 20; // this is somewhat unnecessary, since this padding should probably be filtered out by cellID, not by r2.
+            cellY[index] = 1 << 20;
+            cellZ[index] = 1 << 20;
+            cellID[index] = -1;
+        }
     }
-    return false;
 }
+
+DiscreteCoord DiscreteCluster::getAtom(size_t atom) const {
+    int index = atomIndices[atom];
+    return {cellX[index], cellY[index], cellZ[index]};
+}
+
+void DiscreteCluster::updateAtom(size_t atom, DiscreteCoord point) {
+    int oldIndex = atomIndices[atom];
+    
+    int oldCell = cellIndexFromCoord(cellX[oldIndex], cellY[oldIndex], cellZ[oldIndex]);
+    int newCell = cellIndexFromCoord(point[0], point[1], point[2]);
+
+    // if changing the atom keeps it within the same cell, just update the old point location
+    if (oldCell == newCell) {
+        cellX[oldIndex] = point[0];
+        cellY[oldIndex] = point[1];
+        cellZ[oldIndex] = point[2];
+        return;
+    }
+
+    // if the change moved the atom out of its old cell, set its old location as padding and insert it into the new one
+    cellX[oldIndex] =1 << 20;
+    cellY[oldIndex] =1 << 20;
+    cellZ[oldIndex] =1 << 20;
+    cellID[oldIndex] = -1;
+
+    int insertIndex = -1;
+    Cell& c = cells[newCell];
+    for (int i = 0; i < c.count; i++)
+    {
+        if (cellID[c.start + i] == -1) {
+            insertIndex = c.start + i;
+            break;
+        }
+    }
+
+    if (insertIndex == -1) {
+        // no padding space is available in the cell, some form of rebuild is necessary
+        throw std::runtime_error("Cell overflow, rebuild required!");
+    }
+
+    cellX[insertIndex] = point[0];
+    cellY[insertIndex] = point[1];
+    cellZ[insertIndex] = point[2];
+    cellID[insertIndex] = static_cast<int32_t>(atom);
+
+    atomIndices[atom] = insertIndex;
+}
+
+float DiscreteCluster::getAtomEnergy(size_t atom, DiscreteCoord point, const std::vector<float>& lookup) const {
+    const __m512i vpx = _mm512_set1_epi32(point[0]);
+    const __m512i vpy = _mm512_set1_epi32(point[1]);
+    const __m512i vpz = _mm512_set1_epi32(point[2]);
+
+    const __m512i vAtom = _mm512_set1_epi32((int)atom);
+    const __m512i vMinusOne = _mm512_set1_epi32(-1);
+    const __m512i vCutoff2 = _mm512_set1_epi32(CUTOFF2);
+
+    __m512 accumulate = _mm512_setzero_ps();
+
+    int cx = (point[0] - minX) / CELL_SIZE;
+    int cy = (point[1] - minY) / CELL_SIZE;
+    int cz = (point[2] - minZ) / CELL_SIZE;
+
+    //TODO these neighbour cells can be precomputed, at initialization of the cluster; we can probably also check there if any of them are empty, and keep them out of the neighbourCells lists to avoid calculating effectively only padding points
+    std::vector<int> cellNeighbours;
+    cellNeighbours.reserve(27);
+    for (int dx = -1; dx <= 1; ++dx)
+    for (int dy = -1; dy <= 1; ++dy)
+    for (int dz = -1; dz <= 1; ++dz) {
+        int nx_ = cx + dx;
+        int ny_ = cy + dy;
+        int nz_ = cz + dz;
+
+        if (nx_ < 0 || nx_ >= nx ||
+            ny_ < 0 || ny_ >= ny ||
+            nz_ < 0 || nz_ >= nz)
+            continue;
+        
+        cellNeighbours.push_back((nx_ * ny + ny_) * nz + nz_);
+    }
+
+    for (int c : cellNeighbours) {
+        const Cell& cell = cells[c];
+        
+        for (int i = 0; i < cell.count; i += 16)
+        {
+            int index = cell.start + i;
+
+            __m512i x = _mm512_loadu_epi32(&cellX[index]);
+            __m512i y = _mm512_loadu_epi32(&cellY[index]);
+            __m512i z = _mm512_loadu_epi32(&cellZ[index]);
+            __m512i id = _mm512_loadu_epi32(&cellID[index]);
+
+            __m512i dx = _mm512_sub_epi32(x, vpx);
+            __m512i dy = _mm512_sub_epi32(y, vpy);
+            __m512i dz = _mm512_sub_epi32(z, vpz);
+
+            __m512i dx2 = _mm512_mullo_epi32(dx, dx);
+            __m512i dy2 = _mm512_mullo_epi32(dy, dy);
+            __m512i dz2 = _mm512_mullo_epi32(dz, dz);
+
+            __m512i r2 = _mm512_add_epi32(_mm512_add_epi32(dx2, dy2), dz2);
+
+            __mmask16 mValid = _mm512_cmpneq_epi32_mask(id, vMinusOne); // exclude padding points
+            __mmask16 mNotSelf = _mm512_cmpneq_epi32_mask(id, vAtom); // exclude self-interaction
+            __mmask16 mCutoff = _mm512_cmple_epi32_mask(r2, vCutoff2); // exclude points outside lookup cutoff
+
+            __mmask16 mask = mValid & mNotSelf & mCutoff;
+
+            __m512 energies = _mm512_mask_i32gather_ps(_mm512_setzero_ps(), mask, r2, lookup.data(), 4);
+            accumulate = _mm512_add_ps(accumulate, energies);
+        }
+        
+    }
+    return _mm512_reduce_add_ps(accumulate);
+}
+
+float DiscreteCluster::getAtomEnergy(size_t atom, const std::vector<float>& lookup) const {
+    return getAtomEnergy(atom, getAtom(atom), lookup);
+}
+
+float DiscreteCluster::getClusterEnergy(const std::vector<float>& lookup) const {
+    //TODO fix this :)
+    float total = 0.0f;
+    for (size_t i = 0; i < n; i++)
+    {
+        int index = atomIndices[i];
+        total += getAtomEnergy(i, {cellX[index], cellY[index], cellZ[index]}, lookup);
+    }
+    return total * 0.5f;
+}
+
 
 
 
@@ -177,9 +247,10 @@ Cluster::Cluster(const size_t numberOfPoints) : x((numberOfPoints + 7) & ~size_t
 Cluster::Cluster(const DiscreteCluster& discreteCluster, float gridSpacing) : Cluster(discreteCluster.n) {
     for (size_t i = 0; i < discreteCluster.n; i++)
     {
-        x[i] = static_cast<float>(gridSpacing * discreteCluster.points[4*i]);
-        y[i] = static_cast<float>(gridSpacing * discreteCluster.points[4*i+1]);
-        z[i] = static_cast<float>(gridSpacing * discreteCluster.points[4*i+2]);
+        int index = discreteCluster.atomIndices[i];
+        x[i] = static_cast<float>(gridSpacing * discreteCluster.cellX[index]);
+        y[i] = static_cast<float>(gridSpacing * discreteCluster.cellY[index]);
+        z[i] = static_cast<float>(gridSpacing * discreteCluster.cellZ[index]);
     }
 }
 

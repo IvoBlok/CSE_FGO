@@ -167,7 +167,7 @@ int main(int argc, char** argv) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &totalCores);
 
-    const int NUM_RUNS = 1000;
+    const int NUM_RUNS = 100;
 
     for (size_t n = 0; n < 70; n++)
     {

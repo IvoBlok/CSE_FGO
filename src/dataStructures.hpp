@@ -20,24 +20,56 @@ static inline float horizontalSumAVX(__m256 x) {
 }
 
 
+using DiscreteCoord = std::array<int32_t, 3>;
+
+struct Cell {
+    int start;
+    int count; // padded to multiple of 16
+};
+
 struct DiscreteCluster {
 public:
-    alignas(64) std::vector<int16_t> points; // the points are stored like: [x1, y1, z1, 0, x2, y2, z2, 0, ...]
+    //TODO if we can ensure there are no less then 16 points in each cell, we can improve memory layout by storing a single std::vector<CellData>, where each CellData stores X[16],Y[16],Z[16],ID[16] next to each other
+    alignas(64) std::vector<int32_t> cellX;
+    alignas(64) std::vector<int32_t> cellY;
+    alignas(64) std::vector<int32_t> cellZ;
+    alignas(64) std::vector<int32_t> cellID;
+
+    std::vector<Cell> cells;
+
+    std::vector<int> atomIndices; // go from atom i [0, n] to an index of that atom into cellX,Y,Z,ID
     size_t n;
-private:
-    size_t nPadded;
-    __m512i squaredCutoffSIMD;
+
+    int32_t minX, minY, minZ, maxX, maxY, maxZ;
+    int nx, ny, nz;
+
+    int CELL_SIZE;
+    int CUTOFF2;
 
 public:
-    DiscreteCluster();
-    explicit DiscreteCluster(const size_t numberOfPoints, const int32_t cutoffSIMD);  
+    DiscreteCluster() = default;
+    explicit DiscreteCluster(const size_t numberOfPoints, const std::vector<DiscreteCoord>& points, int DISCRETE_RADIUS , int CUTOFF2, int CELL_SIZE);
 
-    float getAtomEnergyAVX(uint64_t atomIndex, const std::pair<std::vector<uint64_t>, uint64_t>& neighbours, const std::vector<float>& lookup) const;
-    float getAtomEnergyAVX(uint64_t atomIndex, const std::vector<float>& lookup) const;
-    float getClusterEnergy(float gridSpacingSquared) const;
+    DiscreteCoord getAtom(size_t atom) const;
+    void updateAtom(size_t atom, DiscreteCoord point);
 
-    std::pair<std::vector<uint64_t>, uint64_t> getNeighbours(uint64_t atomIndex, uint32_t squaredCutoff) const;
-    bool doesPointOverlap(uint64_t atomIndex, uint64_t maxIncludedIndex) const;
+    float getAtomEnergy(size_t atom, DiscreteCoord point, const std::vector<float>& lookup) const;
+    float getAtomEnergy(size_t atom, const std::vector<float>& lookup) const;
+    float getClusterEnergy(const std::vector<float>& lookup) const;
+
+private:
+    inline int cellIndexFromCoord(int32_t px, int32_t py, int32_t pz) const {
+        int cx = (px - minX) / CELL_SIZE;
+        int cy = (py - minY) / CELL_SIZE;
+        int cz = (pz - minZ) / CELL_SIZE;
+
+        // Optional safety (recommended at least in debug)
+        cx = std::min(std::max(cx, 0), nx - 1);
+        cy = std::min(std::max(cy, 0), ny - 1);
+        cz = std::min(std::max(cz, 0), nz - 1);
+
+        return (cx * ny + cy) * nz + cz;
+    }
 };
 
 
