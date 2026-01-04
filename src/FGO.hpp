@@ -96,6 +96,7 @@ private:
     void localRealOptimization(std::pair<Cluster, float>& candidate);
 
     size_t localDiscreteFrozenOptimization(DiscreteCluster& cluster, const size_t freeIndex);
+    float localDiscreteFrozenOptimization(DiscreteCluster& cluster, const size_t freeIndex, DiscreteCoord freePoint);
 };
 
 #endif // FUZZY_GLOBAL_OPTIMIZER_H

@@ -101,7 +101,6 @@ std::chrono::microseconds FuzzyGlobalOptimizer::runDMCLayer(RunState& state, con
     const auto startTime = std::chrono::high_resolution_clock::now();
 
     DiscreteCluster walker{startCluster};
-    DiscreteCluster proposal{startCluster};
 
     std::vector<float> atomEnergies(params.numberOfAtoms);
     std::vector<float> activeWeights(params.numberOfAtoms);
@@ -150,27 +149,25 @@ std::chrono::microseconds FuzzyGlobalOptimizer::runDMCLayer(RunState& state, con
             if (uniform <= accumulate) break;
         }
 
-        proposal = walker;
-        DiscreteCoord newPoint = getPointInBall(rng, 1.0f, proposal.getAtom(targetAtom));
-        proposal.updateAtom(activeAtom, newPoint);
-        localDiscreteFrozenOptimization(proposal, activeAtom);
-
-        float deltaAtomEnergy = proposal.getAtomEnergy(activeAtom, lookup) - atomEnergies[activeAtom];
+        DiscreteCoord oldPoint = walker.getAtom(activeAtom);
+        DiscreteCoord newPoint = getPointInBall(rng, 1.0f, walker.getAtom(targetAtom));
+        float deltaAtomEnergy = localDiscreteFrozenOptimization(walker, activeAtom, newPoint) - atomEnergies[activeAtom]; // optimize the activeAtom, starting from newPoint. the optimal spot then gets stored in walker
 
         if (deltaAtomEnergy < 0.0f || uniformDist(rng) < std::exp(-deltaAtomEnergy * dmcParams.invAcceptanceEnergy)) {
             // accept move, update walker and weights
             recomputeWeights = true;
-            localDiscreteOptimization(proposal);
-            walker = proposal;
-
+            localDiscreteOptimization(walker);
             stepsSinceImprovement += 1;
 
-            float candidateEnergy = proposal.getClusterEnergy(lookup); 
+            float candidateEnergy = walker.getClusterEnergy(lookup); 
             if(candidateEnergy < state.discCandidates.back().second) {
                 // accept candidate
-                state.discCandidates.emplace_back(proposal, candidateEnergy);
+                state.discCandidates.emplace_back(walker, candidateEnergy);
                 stepsSinceImprovement = 0;
             }
+        } else {
+            // reverse the change to walker
+            walker.updateAtom(activeAtom, oldPoint);
         }
     }
 
@@ -325,3 +322,42 @@ size_t FuzzyGlobalOptimizer::localDiscreteFrozenOptimization(DiscreteCluster& cl
     cluster.updateAtom(freeIndex, freePoint);
     return numChanges;
 }
+
+float FuzzyGlobalOptimizer::localDiscreteFrozenOptimization(DiscreteCluster& cluster, const size_t freeIndex, DiscreteCoord freePoint) {
+    float oldAtomEnergy = cluster.getAtomEnergy(freeIndex, freePoint, lookup);
+
+    int stepsSinceChange, numChanges, axis;
+    stepsSinceChange = numChanges = axis = 0;
+
+    while (stepsSinceChange < 3) {
+        axis = (++axis) % 3;
+
+        freePoint[axis] += 1;
+        float newAtomEnergy = cluster.getAtomEnergy(freeIndex, freePoint, lookup);
+
+        if (newAtomEnergy < oldAtomEnergy) {
+            oldAtomEnergy = newAtomEnergy;
+            stepsSinceChange = 0;
+            numChanges++;
+            continue;
+        }
+
+        freePoint[axis] -= 2;
+        newAtomEnergy = cluster.getAtomEnergy(freeIndex, freePoint, lookup);
+
+        if (newAtomEnergy < oldAtomEnergy) {
+            oldAtomEnergy = newAtomEnergy;
+            stepsSinceChange = 0;
+            numChanges++;
+            continue;
+        }
+
+        freePoint[axis] += 1;
+        stepsSinceChange++;
+    }
+
+    // confirm the changes to the cluster
+    cluster.updateAtom(freeIndex, freePoint);
+    return oldAtomEnergy;
+}
+
