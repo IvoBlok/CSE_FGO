@@ -20,6 +20,7 @@ struct FGOParameters {
     float gridSpacing = 0.02f;
     float gridSpacingSquared = gridSpacing * gridSpacing;
     int32_t cutoffDistance = ((int32_t)(2.1f / gridSpacing));
+    int32_t cellDistance = ((int32_t)(1.9f / gridSpacing)); // recommended to be close to cutoffDistance (going smaller loses discrete energy accuracy, and even slightly larger can double the computational time). Ideally it is also divisable by 2
 
     float gradientStepSize = 0.001f;
 

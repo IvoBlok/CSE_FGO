@@ -35,7 +35,7 @@ target_link_libraries(main PRIVATE ${CMAKE_THREAD_LIBS_INIT})
 add_executable(mainDebug src/main.cpp ${COMMON_SOURCES})
 target_compile_options(mainDebug PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:
-        -O0
+        -O3
         -g3
         -march=native
         -mavx512f
@@ -44,6 +44,8 @@ target_compile_options(mainDebug PRIVATE
         -mavx512dq
         -mavx2
         -mfma
+        -funroll-loops
+        -fno-math-errno
         -fno-omit-frame-pointer
         -fno-optimize-sibling-calls
     >
@@ -76,7 +78,7 @@ target_link_libraries(mainMPI PRIVATE ${MPI_CXX_LIBRARIES} ${CMAKE_THREAD_LIBS_I
 add_executable(mainMPIDebug src/mainMPI.cpp ${COMMON_SOURCES})
 target_compile_options(mainMPIDebug PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:
-        -Og
+        -O3
         -g3
         -march=native
         -mavx512f
@@ -85,6 +87,10 @@ target_compile_options(mainMPIDebug PRIVATE
         -mavx512dq
         -mavx2
         -mfma
+        -ffast-math
+        -funroll-loops
+        -fno-math-errno
+        -fassociative-math
         -fno-omit-frame-pointer
         -fno-optimize-sibling-calls
     >

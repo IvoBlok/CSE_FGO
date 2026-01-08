@@ -92,7 +92,7 @@ std::chrono::microseconds FuzzyGlobalOptimizer::initializeCluster(DiscreteCluste
     for (size_t i = 0; i < params.numberOfAtoms; i++)
         randomPoints.emplace_back(getPointInBall(rng, spawningRadius, {0, 0, 0}));
     
-    cluster = DiscreteCluster{params.numberOfAtoms, randomPoints, (int)(spawningRadius / params.gridSpacing), params.cutoffDistance * params.cutoffDistance, params.cutoffDistance};
+    cluster = DiscreteCluster{params.numberOfAtoms, randomPoints, (int)(spawningRadius / params.gridSpacing), params.cutoffDistance * params.cutoffDistance, params.cellDistance};
 
     return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - startTime);
 }

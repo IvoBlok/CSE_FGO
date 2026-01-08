@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cmath>
 #include <cstdint>
+#include <stdexcept>
 #include <immintrin.h>
 
 static inline float horizontalSumAVX(__m256 x) {
@@ -22,22 +23,24 @@ static inline float horizontalSumAVX(__m256 x) {
 
 using DiscreteCoord = std::array<int32_t, 3>;
 
-struct Cell {
-    int start;
-    int count; // padded to multiple of 16
+struct alignas(64) CellData {
+    std::array<int32_t, 16> cellX;
+    std::array<int32_t, 16> cellY;
+    std::array<int32_t, 16> cellZ;
+    std::array<int32_t, 16> cellID;
+};
+
+struct AtomIndex {
+    int cell;
+    int slot;
 };
 
 struct DiscreteCluster {
 public:
-    //TODO if we can ensure there are no less then 16 points in each cell, we can improve memory layout by storing a single std::vector<CellData>, where each CellData stores X[16],Y[16],Z[16],ID[16] next to each other
-    alignas(64) std::vector<int32_t> cellX;
-    alignas(64) std::vector<int32_t> cellY;
-    alignas(64) std::vector<int32_t> cellZ;
-    alignas(64) std::vector<int32_t> cellID;
-
-    std::vector<Cell> cells;
-
-    std::vector<int> atomIndices; // go from atom i [0, n] to an index of that atom into cellX,Y,Z,ID
+    alignas(64) std::vector<CellData> cellData;
+    std::vector<std::vector<int>> cellNeighbours;
+    std::vector<int> cellLengths; // number of non-padding elements in the cell
+    std::vector<AtomIndex> atomIndices; // go from atom i [0, n] to an index of that atom into cellX,Y,Z,ID
     size_t n;
 
     int32_t minX, minY, minZ, maxX, maxY, maxZ;
@@ -63,13 +66,17 @@ private:
         int cy = (py - minY) / CELL_SIZE;
         int cz = (pz - minZ) / CELL_SIZE;
 
-        // Optional safety (recommended at least in debug)
-        cx = std::min(std::max(cx, 0), nx - 1);
-        cy = std::min(std::max(cy, 0), ny - 1);
-        cz = std::min(std::max(cz, 0), nz - 1);
+        if (cx < 0 || cx > nx - 1 || cy < 0 || cy > ny - 1 || cz < 0 || cz > nz - 1)
+            throw std::runtime_error("point is outside domain of cluster; either implement some moving window, recenter the structure, or make the domain larger by default");
 
         return (cx * ny + cy) * nz + cz;
     }
+
+    inline int cellIndexFromCoord(DiscreteCoord point) const {
+        return cellIndexFromCoord(point[0], point[1], point[2]);
+    }
+
+    void initializeCellNeighboursList();
 };
 
 
