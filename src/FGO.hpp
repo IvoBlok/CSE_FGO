@@ -42,14 +42,14 @@ struct FGOParameters {
     DMCParameters dmcLayer1 = DMCParameters(1.0f, -4.1f, 1.25f, 0.4f, 2.5f);
     DMCParameters dmcLayer2 = DMCParameters(1.0f, -11.0f, 1.3f, 0.3f, 1.5f);
 
-    float spawningRadiusFactor = 0.4f;
+    float spawningRadiusFactor = 0.5f;
 
     size_t maxRealOptimizationIterations = 2000;
     float realOptimizationTolerance = 1e-6f;
 };
 
 struct SingleRunResult {
-    std::vector<std::pair<DiscreteCluster, float>> discCandidates;
+    std::vector<std::pair<DiscretePoints, float>> discCandidates;
     std::vector<std::pair<Cluster, float>> contCandidates;
 
     // optionally more, to be used for debugging / performance analysis
@@ -72,7 +72,7 @@ private:
     alignas(64) std::vector<float> lookup;
 
     struct RunState {
-        std::vector<std::pair<DiscreteCluster, float>> discCandidates;
+        std::vector<std::pair<DiscretePoints, float>> discCandidates;
         std::vector<std::pair<Cluster, float>> contCandidates;
     };
 

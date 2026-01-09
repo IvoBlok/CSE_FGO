@@ -17,7 +17,7 @@ DiscreteCluster::DiscreteCluster(
     int DISCRETE_RADIUS,
     int CUTOFF2,
     int CELL_SIZE
-) : n(numberOfPoints), CUTOFF2(CUTOFF2), CELL_SIZE(CELL_SIZE) {
+) : n(numberOfPoints), CUTOFF2(CUTOFF2), INV_CELL_SIZE(1.0f / (float)CELL_SIZE) {
     // find bounding box (with margin)
     const double margin = 1.3;
     const double R = margin * DISCRETE_RADIUS;
@@ -76,6 +76,26 @@ DiscreteCluster::DiscreteCluster(
     cellNeighbours.resize(numCells);
     initializeCellNeighboursList();
 }
+
+DiscreteCluster::DiscreteCluster(
+    const DiscretePoints& points,
+    int DISCRETE_RADIUS,
+    int CUTOFF2,
+    int CELL_SIZE
+) : DiscreteCluster(
+    points.x.size(),
+    [&points]() {
+        std::vector<DiscreteCoord> coords;
+        coords.reserve(points.x.size());
+        for (size_t i = 0; i < points.x.size(); ++i) {
+            coords.push_back({points.x[i], points.y[i], points.z[i]});
+        }
+        return coords;
+    }(),
+    DISCRETE_RADIUS,
+    CUTOFF2,
+    CELL_SIZE
+) {}
 
 DiscreteCoord DiscreteCluster::getAtom(size_t atom) const {
     auto index = atomIndices[atom];
@@ -184,6 +204,22 @@ float DiscreteCluster::getClusterEnergy(const std::vector<float>& lookup) const 
     return total * 0.5f;
 }
 
+DiscretePoints DiscreteCluster::exportPoints() const {
+    DiscretePoints result;
+    result.x.reserve(n);
+    result.y.reserve(n);
+    result.z.reserve(n);
+
+    for (auto index : atomIndices) {
+        result.x.emplace_back(cellData[index.cell].cellX[index.slot]);
+        result.y.emplace_back(cellData[index.cell].cellY[index.slot]);
+        result.z.emplace_back(cellData[index.cell].cellZ[index.slot]);
+    }
+    
+    return result;
+}
+
+
 void DiscreteCluster::initializeCellNeighboursList() {
     for (int cx = 0; cx < nx; cx++) {
         for (int cy = 0; cy < ny; cy++) {
@@ -215,13 +251,12 @@ void DiscreteCluster::initializeCellNeighboursList() {
 // make the vectors with lengts of a multiple of 8, such that SIMD instructions can be optimally used in getAtomEnergyAVX
 Cluster::Cluster(const size_t numberOfPoints) : x((numberOfPoints + 7) & ~size_t(7)), y((numberOfPoints + 7) & ~size_t(7)), z((numberOfPoints + 7) & ~size_t(7)), n(numberOfPoints), nPadded((numberOfPoints + 7) & ~size_t(7)) {}
 
-Cluster::Cluster(const DiscreteCluster& discreteCluster, float gridSpacing) : Cluster(discreteCluster.n) {
-    for (size_t i = 0; i < discreteCluster.n; i++)
+Cluster::Cluster(const DiscretePoints& discretePoints, float gridSpacing) : Cluster(discretePoints.x.size()) {
+    for (size_t i = 0; i < n; i++)
     {
-        auto index = discreteCluster.atomIndices[i];
-        x[i] = static_cast<float>(gridSpacing * discreteCluster.cellData[index.cell].cellX[index.slot]); // TODO can be faster, since x values of points are next to each other in (small) blocks
-        y[i] = static_cast<float>(gridSpacing * discreteCluster.cellData[index.cell].cellY[index.slot]);
-        z[i] = static_cast<float>(gridSpacing * discreteCluster.cellData[index.cell].cellZ[index.slot]);
+        x[i] = static_cast<float>(gridSpacing * discretePoints.x[i]);
+        y[i] = static_cast<float>(gridSpacing * discretePoints.y[i]);
+        z[i] = static_cast<float>(gridSpacing * discretePoints.z[i]);
     }
 }
 

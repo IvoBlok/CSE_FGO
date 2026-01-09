@@ -39,16 +39,18 @@ SingleRunResult FuzzyGlobalOptimizer::runSingle(std::mt19937& rng) {
 
     RunState state;
     SingleRunResult result;
-    auto& startCandidate = state.discCandidates.emplace_back(DiscreteCluster(), std::numeric_limits<float>::infinity());
+    auto startCluster = DiscreteCluster();
 
     // step 1 (from paper)
-    initializeCluster(startCandidate.first, rng);
-    localDiscreteOptimization(startCandidate.first);
-    startCandidate.second = startCandidate.first.getClusterEnergy(lookup);
+    initializeCluster(startCluster, rng);
+    localDiscreteOptimization(startCluster);
+    state.discCandidates.emplace_back(startCluster.exportPoints(), startCluster.getClusterEnergy(lookup));
 
     // step 2
-    result.dmc1Time = runDMCLayer(state, startCandidate.first, params.dmcLayer1, rng);
-    result.dmc2Time = runDMCLayer(state, state.discCandidates.back().first, params.dmcLayer2, rng); // initialize DMC2 with the best candidate from DMC1
+    result.dmc1Time = runDMCLayer(state, startCluster, params.dmcLayer1, rng);
+    float spawningRadius = params.spawningRadiusFactor * std::pow(params.numberOfAtoms, 0.33f);
+    DiscreteCluster startDMC2(state.discCandidates.back().first, (int)(spawningRadius / params.gridSpacing), params.cutoffDistance * params.cutoffDistance, params.cellDistance);
+    result.dmc2Time = runDMCLayer(state, startDMC2, params.dmcLayer2, rng); // initialize DMC2 with the best candidate from DMC1
 
     // step 3
     result.realOptTime = runRealOptimization(state, 2.0f);
@@ -162,7 +164,7 @@ std::chrono::microseconds FuzzyGlobalOptimizer::runDMCLayer(RunState& state, con
             float candidateEnergy = walker.getClusterEnergy(lookup); 
             if(candidateEnergy < state.discCandidates.back().second) {
                 // accept candidate
-                state.discCandidates.emplace_back(walker, candidateEnergy);
+                state.discCandidates.emplace_back(walker.exportPoints(), candidateEnergy);
                 stepsSinceImprovement = 0;
             }
         } else {

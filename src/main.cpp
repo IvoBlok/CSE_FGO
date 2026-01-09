@@ -184,8 +184,8 @@ int main(int argc, char** argv) {
     auto startTime = std::chrono::high_resolution_clock::now();
     
     const int NUM_RUNS = 100;
-    const int MIN_N = 2;
-    const int MAX_N = 15;
+    const int MIN_N = 16;
+    const int MAX_N = 40;
 
     JsonStreamWriter output("benchmark_results.json");
     output.startArray("allNResults");

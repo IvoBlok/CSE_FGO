@@ -21,6 +21,12 @@ static inline float horizontalSumAVX(__m256 x) {
 }
 
 
+struct DiscretePoints {
+    std::vector<int32_t> x;
+    std::vector<int32_t> y;
+    std::vector<int32_t> z;
+};
+
 using DiscreteCoord = std::array<int32_t, 3>;
 
 struct alignas(64) CellData {
@@ -46,12 +52,13 @@ public:
     int32_t minX, minY, minZ, maxX, maxY, maxZ;
     int nx, ny, nz;
 
-    int CELL_SIZE;
+    float INV_CELL_SIZE;
     int CUTOFF2;
 
 public:
     DiscreteCluster() = default;
     explicit DiscreteCluster(const size_t numberOfPoints, const std::vector<DiscreteCoord>& points, int DISCRETE_RADIUS , int CUTOFF2, int CELL_SIZE);
+    explicit DiscreteCluster(const DiscretePoints& points, int DISCRETE_RADIUS , int CUTOFF2, int CELL_SIZE);
 
     DiscreteCoord getAtom(size_t atom) const;
     void updateAtom(size_t atom, DiscreteCoord point);
@@ -60,14 +67,16 @@ public:
     float getAtomEnergy(size_t atom, const std::vector<float>& lookup) const;
     float getClusterEnergy(const std::vector<float>& lookup) const;
 
+    DiscretePoints exportPoints() const;
+
 private:
     inline int cellIndexFromCoord(int32_t px, int32_t py, int32_t pz) const {
-        int cx = (px - minX) / CELL_SIZE;
-        int cy = (py - minY) / CELL_SIZE;
-        int cz = (pz - minZ) / CELL_SIZE;
+        int cx = static_cast<int>((px - minX) * INV_CELL_SIZE);
+        int cy = static_cast<int>((py - minY) * INV_CELL_SIZE);
+        int cz = static_cast<int>((pz - minZ) * INV_CELL_SIZE);
 
-        if (cx < 0 || cx > nx - 1 || cy < 0 || cy > ny - 1 || cz < 0 || cz > nz - 1)
-            throw std::runtime_error("point is outside domain of cluster; either implement some moving window, recenter the structure, or make the domain larger by default");
+        //if (cx < 0 || cx > nx - 1 || cy < 0 || cy > ny - 1 || cz < 0 || cz > nz - 1)
+        //    throw std::runtime_error("point is outside domain of cluster; either implement some moving window, recenter the structure, or make the domain larger by default");
 
         return (cx * ny + cy) * nz + cz;
     }
@@ -91,7 +100,7 @@ private:
 public:
     Cluster() = default;
     explicit Cluster(const size_t numberOfPoints);
-    explicit Cluster(const DiscreteCluster& discreteCluster, float gridSpacing);
+    explicit Cluster(const DiscretePoints& discretePoints, float gridSpacing);
 
     Cluster(const Cluster& other) = default;
     Cluster& operator=(const Cluster& other) = default;
