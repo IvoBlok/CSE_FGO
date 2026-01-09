@@ -2,7 +2,6 @@
 #include <fstream>
 
 #include "json.hpp"
-using json = nlohmann::json;
 
 #include "FGO.hpp"
 
@@ -160,66 +159,37 @@ const float clusterBestEnergies[151] = {
     -893.310258f   // 150 atoms
 };
 
-struct BenchmarkResult {
-    struct NResult {
-        std::vector<SingleRunResult> multiRunResult;
-        int n;
-        float exactSolution;
-    };
+void writeSingleRunResult(JsonStreamWriter& writer, const SingleRunResult& result) {
+    writer.startArrayObject();
     
-    std::vector<NResult> allNResults;
-    std::chrono::microseconds totalBenchmarkTime{0};
-    std::string timestamp;
-};
-
-void to_json(json& j, const SingleRunResult& result) {
-    std::vector<float> discCandidatesSecond;
-    discCandidatesSecond.reserve(result.discCandidates.size());
-    for (const auto& pair : result.discCandidates) {
-        discCandidatesSecond.push_back(pair.second);
-    }
+    writer.startArray("discCandidates");
+    for (const auto& pair : result.discCandidates)
+        writer.writeArrayElement(pair.second);
+    writer.endArray();
     
-    std::vector<float> contCandidatesSecond;
-    contCandidatesSecond.reserve(result.contCandidates.size());
-    for (const auto& pair : result.contCandidates) {
-        contCandidatesSecond.push_back(pair.second);
-    }
-
-    j = json{
-        {"discCandidates", discCandidatesSecond},
-        {"contCandidates", contCandidatesSecond},
-        {"totalTime", result.totalTime.count()},
-        {"dmc1Time", result.dmc1Time.count()},
-        {"dmc2Time", result.dmc2Time.count()},
-        {"realOptTime", result.realOptTime.count()}
-    };
-}
-
-void to_json(json& j, const BenchmarkResult::NResult& nResult) {
-    j = json{
-        {"multiRunResult", nResult.multiRunResult},
-        {"n", nResult.n},
-        {"exactSolution", nResult.exactSolution}
-    };
-}
-
-void to_json(json& j, const BenchmarkResult& benchmark) {
-    j = json{
-        {"allNResults", benchmark.allNResults},
-        {"totalBenchmarkTime", benchmark.totalBenchmarkTime.count()},
-        {"timestamp", benchmark.timestamp}
-    };
+    writer.startArray("contCandidates");
+    for (const auto& pair : result.contCandidates)
+        writer.writeArrayElement(pair.second);
+    writer.endArray();
+    
+    writer.write("totalTime", result.totalTime.count());
+    writer.write("dmc1Time", result.dmc1Time.count());
+    writer.write("dmc2Time", result.dmc2Time.count());
+    writer.write("realOptTime", result.realOptTime.count());
+    
+    writer.endArrayObject();
 }
 
 int main(int argc, char** argv) {
     auto startTime = std::chrono::high_resolution_clock::now();
     
-    BenchmarkResult benchmarkResult;
-    
     const int NUM_RUNS = 100;
     const int MIN_N = 2;
     const int MAX_N = 15;
-    
+
+    JsonStreamWriter output("benchmark_results.json");
+    output.startArray("allNResults");
+
     for (int n = MIN_N; n <= MAX_N; n++) {
         std::cout << "Testing N = " << n << "..." << std::endl;
         
@@ -230,30 +200,20 @@ int main(int argc, char** argv) {
         
         auto multiResult = optimizer.runMultiple(NUM_RUNS);
         
-        BenchmarkResult::NResult nResult;
-        nResult.multiRunResult = std::move(multiResult);
-        nResult.exactSolution = clusterBestEnergies[n];
-        nResult.n = n;
-        benchmarkResult.allNResults.push_back(nResult);
+        output.startArrayObject();
+        output.write("n", n);
+        output.write("exactSolution", clusterBestEnergies[n]);
+        output.startArray("multiRunResult");
+        for (const auto& result : multiResult) 
+            writeSingleRunResult(output, result);
+        output.endArray();
+        output.endArrayObject();
     }
+    int benchmarkTime = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - startTime).count();
+    output.endArray();
+    output.write("totalBenchmarkTime", benchmarkTime);
     
-    auto endTime = std::chrono::high_resolution_clock::now();
-    benchmarkResult.totalBenchmarkTime = 
-        std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);
-    
-    // add timestamp
-    auto now = std::chrono::system_clock::now();
-    auto now_c = std::chrono::system_clock::to_time_t(now);
-    std::ostringstream oss;
-    oss << std::put_time(std::localtime(&now_c), "%Y-%m-%d %H:%M:%S");
-    benchmarkResult.timestamp = oss.str();
-    
-    // save to JSON file
-    json j = benchmarkResult;
-    std::ofstream file("benchmark_results.json");
-    file << j.dump(2);
-    
-    std::cout << "\nBenchmark completed in " << benchmarkResult.totalBenchmarkTime.count() / 1e6 << " seconds\n";
+    std::cout << "\nBenchmark completed in " << benchmarkTime / 1e6 << " seconds\n";
     std::cout << "Results saved to benchmark_results.json\n";
     return 0;
 }

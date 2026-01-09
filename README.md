@@ -48,7 +48,6 @@ To Do
 =========
  - use new structure to keep track of non-empty neighbour cells
  - use new CellData storage to only store non-empty cells (drastically limits memory usage per DiscreteCluster, and DiscreteCluster copying costs)
- - redo the output (JSON) storage, such that results from a run get written to the file directly, not copied to some global piece of memory
  - Investigate the lower success percentage compared to the paper results? Seems mostly resolved (for the values of N tested; 2-100)
  - the quadratic fit local real optimization, on rare occasions, instead of decreasing the energy, increases it by quite a bit; leading to occasional spikes in the RealCluster violin plots. 
  - General speedups are defintely achievable; stuff like gradient calculation, getNeighbours and others can easily be improved upon
