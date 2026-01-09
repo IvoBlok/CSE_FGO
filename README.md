@@ -35,7 +35,7 @@ Alternatively use the GUI in (sudo) hotspot; Framepoint is probably the nicest m
 I also use Intel VTune here, since it has a pretty nice source -> assembly visualization. To use Intel Vtune run:
 
     source /opt/intel/oneapi/setvars.sh
-    vtune -collect hotspots -knob enable-characterization-insights=false -r vTuneResults -- ./mainDebug
+    vtune -collect hotspots -knob enable-characterization-insights=false -r vTuneResults -- ./mainProfiler
     vtune-gui <results_directory (vTuneResults)>
 
 Profiling the parallel version can also be done with VTune:
@@ -46,8 +46,6 @@ Profiling the parallel version can also be done with VTune:
 
 To Do
 =========
- - use new structure to keep track of non-empty neighbour cells
- - use new CellData storage to only store non-empty cells (drastically limits memory usage per DiscreteCluster, and DiscreteCluster copying costs)
  - Investigate the lower success percentage compared to the paper results? Seems mostly resolved (for the values of N tested; 2-100)
  - the quadratic fit local real optimization, on rare occasions, instead of decreasing the energy, increases it by quite a bit; leading to occasional spikes in the RealCluster violin plots. 
  - General speedups are defintely achievable; stuff like gradient calculation, getNeighbours and others can easily be improved upon

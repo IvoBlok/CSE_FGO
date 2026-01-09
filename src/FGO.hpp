@@ -20,8 +20,8 @@ struct FGOParameters {
     float gridSpacing = 0.02f;
     float gridSpacingSquared = gridSpacing * gridSpacing;
     int32_t cutoffDistance = ((int32_t)(2.1f / gridSpacing));
-    int32_t cellDistance = ((int32_t)(1.9f / gridSpacing)); // recommended to be close to cutoffDistance (going smaller loses discrete energy accuracy, and even slightly larger can double the computational time). Ideally it is also divisable by 2
-
+    int32_t cellDistance = ((int32_t)(2.1f / gridSpacing)); // recommended to be close to cutoffDistance (going smaller loses, on average, some discrete energy accuracy)
+    int32_t neighbourUpdateInterval = 25; // number of gridSpacing steps before the disrete optimization recalculates neighbours. A higher interval saves computational time, too high comes at the cost of accuracy
     float gradientStepSize = 0.001f;
 
     struct DMCParameters {
@@ -42,7 +42,7 @@ struct FGOParameters {
     DMCParameters dmcLayer1 = DMCParameters(1.0f, -4.1f, 1.25f, 0.4f, 2.5f);
     DMCParameters dmcLayer2 = DMCParameters(1.0f, -11.0f, 1.3f, 0.3f, 1.5f);
 
-    float spawningRadiusFactor = 0.5f;
+    float spawningRadiusFactor = 0.4f;
 
     size_t maxRealOptimizationIterations = 2000;
     float realOptimizationTolerance = 1e-6f;

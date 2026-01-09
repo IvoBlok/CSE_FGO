@@ -12,162 +12,130 @@
 // DiscreteCluster Implementation
 // ===================================================================================
 DiscreteCluster::DiscreteCluster(
-    const size_t numberOfPoints, 
-    const std::vector<DiscreteCoord>& points,
+    DiscretePoints& points,
     int DISCRETE_RADIUS,
     int CUTOFF2,
     int CELL_SIZE
-) : n(numberOfPoints), CUTOFF2(CUTOFF2), INV_CELL_SIZE(1.0f / (float)CELL_SIZE) {
+) : n(points.x.size()), CUTOFF2(CUTOFF2), INV_CELL_SIZE(1.0f / (float)CELL_SIZE) {
     // find bounding box (with margin)
-    const double margin = 1.3;
-    const double R = margin * DISCRETE_RADIUS;
+    const double R = 1.3f * DISCRETE_RADIUS;
     
-    // number of cells from center to one side (including 2 layers of padding)
-    int k = static_cast<int>(std::ceil(R / CELL_SIZE + 5.5));
-    nx = ny = nz = 2 * k + 1;
+    // number of cells from center to one side (including 5 layers of padding)
+    int k = static_cast<int>(std::ceil(R / CELL_SIZE + 5));
+    nCells = 2 * k + 1;
 
     // center cell is exactly centered at the origin
-    minX = -(k + 0.5f) * CELL_SIZE;
-    maxX =  (k + 0.5f) * CELL_SIZE;
+    minCells = -(k + 0.5f) * CELL_SIZE;
+    const int numCells = nCells * nCells * nCells;
 
-    minY = minX;
-    maxY = maxX;
-    minZ = minX;
-    maxZ = maxX;
 
-    const int numCells = nx * ny * nz;
+    // copy point data
+    x = points.x;
+    y = points.y;
+    z = points.z;
 
-    // fill cellData and cellLengths
-    cellData = std::vector<CellData>(numCells);
-    cellLengths = std::vector<int>(numCells, 0);
-    atomIndices.resize(numberOfPoints);
-
-    for (size_t i = 0; i < n; i++)
-    {
-        int c = cellIndexFromCoord(points[i]);
-
-        if (cellLengths[c] < 15) {
-            cellData[c].cellX[cellLengths[c]] = points[i][0];
-            cellData[c].cellY[cellLengths[c]] = points[i][1];
-            cellData[c].cellZ[cellLengths[c]] = points[i][2];
-            cellData[c].cellID[cellLengths[c]] = static_cast<int32_t>(i);
-
-            atomIndices[i].cell = c; // this is the index of the X coordinate of atom i, starting from the start of std::vector<CellData> celldata.
-            atomIndices[i].slot = cellLengths[c];
-
-            cellLengths[c]++;
-        } else {
-            throw std::runtime_error("given starting cluster is too dense for memory layout!");
-        }
-    }
-
-    // fill padded elements with data such that they are ignored in energy calculation
-    for (int c = 0; c < numCells; c++)
-    {
-        for (int i = cellLengths[c]; i < 16; i++) {
-            cellData[c].cellX[i] = 1 << 20;
-            cellData[c].cellY[i] = 1 << 20;
-            cellData[c].cellZ[i] = 1 << 20;
-            cellData[c].cellID[i] = -1;
-        }
-    }
-
-    // calculate the cells neighbouring each cell, only including non-empty ones
+    // sort each point into the appropriate cell
+    cells.resize(numCells);
     cellNeighbours.resize(numCells);
-    initializeCellNeighboursList();
+    atomCell.resize(n);
+
+    for (size_t i = 0; i < n; i++) {
+        int c = cellIndexFromCoord(x[i], y[i], z[i]);
+        cells[c].push_back(i);
+        atomCell[i] = c;
+    }
+
+    // set up cell neighbours
+    for (int cx = 0; cx < nCells; cx++)
+    for (int cy = 0; cy < nCells; cy++)
+    for (int cz = 0; cz < nCells; cz++) {
+        int c = (cx * nCells + cy) * nCells + cz;
+
+        auto& neighbours = cellNeighbours[c];
+        neighbours.clear();
+
+        for (int dx = -1; dx <= 1; dx++)
+        for (int dy = -1; dy <= 1; dy++)
+        for (int dz = -1; dz <= 1; dz++) {
+            int nx = cx + dx;
+            int ny = cy + dy;
+            int nz = cz + dz;
+            
+            if (nx >= 0 && nx < nCells && ny >= 0 && ny < nCells && nz >= 0 && nz < nCells) {
+                int neighbourIndex = (nx * nCells + ny) * nCells + nz;
+                neighbours.push_back(neighbourIndex);
+            }
+        }
+    }
 }
 
-DiscreteCluster::DiscreteCluster(
-    const DiscretePoints& points,
-    int DISCRETE_RADIUS,
-    int CUTOFF2,
-    int CELL_SIZE
-) : DiscreteCluster(
-    points.x.size(),
-    [&points]() {
-        std::vector<DiscreteCoord> coords;
-        coords.reserve(points.x.size());
-        for (size_t i = 0; i < points.x.size(); ++i) {
-            coords.push_back({points.x[i], points.y[i], points.z[i]});
-        }
-        return coords;
-    }(),
-    DISCRETE_RADIUS,
-    CUTOFF2,
-    CELL_SIZE
-) {}
-
 DiscreteCoord DiscreteCluster::getAtom(size_t atom) const {
-    auto index = atomIndices[atom];
-    return {cellData[index.cell].cellX[index.slot], cellData[index.cell].cellY[index.slot], cellData[index.cell].cellZ[index.slot]};
+    return {x[atom], y[atom], z[atom]};
 }
 
 void DiscreteCluster::updateAtom(size_t atom, DiscreteCoord point) {
-    auto oldIndex = atomIndices[atom];
-    int newCell = cellIndexFromCoord(point);
+    auto oldCell = atomCell[atom];
+    auto newCell = cellIndexFromCoord(point);
 
-    // if changing the atom keeps it within the same cell, just update the old point location
-    if (oldIndex.cell == newCell) {
-        cellData[oldIndex.cell].cellX[oldIndex.slot] = point[0];
-        cellData[oldIndex.cell].cellY[oldIndex.slot] = point[1];
-        cellData[oldIndex.cell].cellZ[oldIndex.slot] = point[2];
-        return;
-    } else {
-        // if the change moved the atom out of its old cell, set its old location as padding and insert it into the new one
-        cellData[oldIndex.cell].cellX[oldIndex.slot] = 1 << 20;
-        cellData[oldIndex.cell].cellY[oldIndex.slot] = 1 << 20;
-        cellData[oldIndex.cell].cellZ[oldIndex.slot] = 1 << 20;
-        cellData[oldIndex.cell].cellID[oldIndex.slot] = -1;
-        cellLengths[oldIndex.cell]--;
-    }
+    x[atom] = point[0];
+    y[atom] = point[1];
+    z[atom] = point[2];
 
-    int insertIndex = -1;
-    CellData& c = cellData[newCell];
-    for (int i = 0; i < 16; i++)
-    {
-        if (c.cellID[i] == -1) {
-            insertIndex = i;
-            break;
-        }
-    }
-
-    if (insertIndex == -1) {
-        throw std::runtime_error("Cluster is too dense for memory layout, atom move doesn't fit!");
-    } else {
-        cellData[newCell].cellX[insertIndex] = point[0];
-        cellData[newCell].cellY[insertIndex] = point[1];
-        cellData[newCell].cellZ[insertIndex] = point[2];
-        cellData[newCell].cellID[insertIndex] = static_cast<int32_t>(atom);
-
-        atomIndices[atom].cell = newCell;
-        atomIndices[atom].slot = insertIndex;
-
-        cellLengths[newCell]++;
+    if (oldCell != newCell) {
+        cells[oldCell].erase(std::remove(cells[oldCell].begin(), cells[oldCell].end(), atom), cells[oldCell].end());
+        cells[newCell].push_back(atom);
+        atomCell[atom] = newCell;
     }
 }
 
-float DiscreteCluster::getAtomEnergy(size_t atom, DiscreteCoord point, const std::vector<float>& lookup) const {
+DiscretePoints DiscreteCluster::gatherNeighbourBuffer(size_t freeAtom, DiscreteCoord point) const {
+    DiscretePoints buffer;
+    buffer.x.reserve(n);
+    buffer.y.reserve(n);
+    buffer.z.reserve(n);
+    
+    //TODO check distances here (efficiently), and only accept those within the cutoff range. This should drastically lower the number of points in the buffer (~1/0,15 = 6,7x smaller)
+    //TODO reuse the same buffer each time, and probably even keep a large amount stored. Then maybe return how many multiples of 16 are in it, and only loop over that integer amount in getAtomEnergy
+
+    int centerCell = cellIndexFromCoord(point);
+
+    for (auto neighbourCell : cellNeighbours[centerCell])
+    {
+        for (auto atom : cells[neighbourCell])
+        {
+            if (freeAtom == atom) continue; // skip self, such that energy calculations don't take the contribution from self relative to self into consideration
+
+            buffer.x.push_back(x[atom]);
+            buffer.y.push_back(y[atom]);
+            buffer.z.push_back(z[atom]);
+        }
+    }
+
+    // add padding to ensure the buffer size per axis is a multiple of 16 for easy loading with simd instructions
+    size_t nNeighbours = buffer.x.size();
+    size_t padded = (nNeighbours + 15) & ~15;
+
+    for (size_t i = nNeighbours; i < padded; i++) {
+        buffer.x.push_back(1 << 12);
+        buffer.y.push_back(1 << 12);
+        buffer.z.push_back(1 << 12);
+    }
+    
+    return buffer;
+}
+
+float DiscreteCluster::getAtomEnergy(DiscreteCoord point, const DiscretePoints& neighbours, const std::vector<float>& lookup) const {
     const __m512i vpx = _mm512_set1_epi32(point[0]);
     const __m512i vpy = _mm512_set1_epi32(point[1]);
     const __m512i vpz = _mm512_set1_epi32(point[2]);
 
-    const __m512i vAtom = _mm512_set1_epi32((int)atom);
-    const __m512i vMinusOne = _mm512_set1_epi32(-1);
     const __m512i vCutoff2 = _mm512_set1_epi32(CUTOFF2);
-
     __m512 accumulate = _mm512_setzero_ps();
 
-    int centerCell = cellIndexFromCoord(point);
-
-    for (const int c : cellNeighbours[centerCell]) {
-        if (cellLengths[c] == 0) continue;
-
-        const CellData& cell = cellData[c];
-
-        __m512i x = _mm512_load_epi32(&cell.cellX[0]);
-        __m512i y = _mm512_load_epi32(&cell.cellY[0]);
-        __m512i z = _mm512_load_epi32(&cell.cellZ[0]);
-        __m512i id = _mm512_load_epi32(&cell.cellID[0]);
+    for (size_t i = 0; i < neighbours.x.size(); i += 16) {
+        __m512i x = _mm512_loadu_epi32(&neighbours.x[i]);
+        __m512i y = _mm512_loadu_epi32(&neighbours.y[i]);
+        __m512i z = _mm512_loadu_epi32(&neighbours.z[i]);
 
         __m512i dx = _mm512_sub_epi32(x, vpx);
         __m512i dy = _mm512_sub_epi32(y, vpy);
@@ -179,71 +147,44 @@ float DiscreteCluster::getAtomEnergy(size_t atom, DiscreteCoord point, const std
 
         __m512i r2 = _mm512_add_epi32(_mm512_add_epi32(dx2, dy2), dz2);
 
-        __mmask16 mValid = _mm512_cmpneq_epi32_mask(id, vMinusOne); // exclude padding points
-        __mmask16 mNotSelf = _mm512_cmpneq_epi32_mask(id, vAtom); // exclude self-interaction
-        __mmask16 mCutoff = _mm512_cmple_epi32_mask(r2, vCutoff2); // exclude points outside lookup cutoff
+        __mmask16 cutoffMask = _mm512_cmple_epi32_mask(r2, vCutoff2); // exclude points outside lookup cutoff
 
-        __mmask16 mask = mValid & mNotSelf & mCutoff;
-
-        __m512 energies = _mm512_mask_i32gather_ps(_mm512_setzero_ps(), mask, r2, lookup.data(), 4);
+        __m512 energies = _mm512_mask_i32gather_ps(_mm512_setzero_ps(), cutoffMask, r2, lookup.data(), 4);
         accumulate = _mm512_add_ps(accumulate, energies);
     }
     return _mm512_reduce_add_ps(accumulate);
 }
 
-float DiscreteCluster::getAtomEnergy(size_t atom, const std::vector<float>& lookup) const {
-    return getAtomEnergy(atom, getAtom(atom), lookup);
+float DiscreteCluster::getAtomEnergy(size_t atom, const DiscretePoints& neighbours, const std::vector<float>& lookup) const {
+    return getAtomEnergy(getAtom(atom), neighbours, lookup);
+}
+
+float DiscreteCluster::getAtomEnergySlow(size_t atom, const std::vector<float>& lookup) const {
+    auto buffer = gatherNeighbourBuffer(atom, getAtom(atom));
+    return getAtomEnergy(getAtom(atom), buffer, lookup);
 }
 
 float DiscreteCluster::getClusterEnergy(const std::vector<float>& lookup) const {
     //TODO fix this :)
     float total = 0.0f;
-    for (size_t i = 0; i < n; i++)
-        total += getAtomEnergy(i, lookup);
+    for (size_t i = 0; i < n; i++) {
+        auto buffer = gatherNeighbourBuffer(i, getAtom(i));
+        total += getAtomEnergy(i, buffer, lookup);
+    }
 
     return total * 0.5f;
 }
 
 DiscretePoints DiscreteCluster::exportPoints() const {
     DiscretePoints result;
-    result.x.reserve(n);
-    result.y.reserve(n);
-    result.z.reserve(n);
 
-    for (auto index : atomIndices) {
-        result.x.emplace_back(cellData[index.cell].cellX[index.slot]);
-        result.y.emplace_back(cellData[index.cell].cellY[index.slot]);
-        result.z.emplace_back(cellData[index.cell].cellZ[index.slot]);
-    }
+    result.x = x;
+    result.y = y;
+    result.z = z;
     
     return result;
 }
 
-
-void DiscreteCluster::initializeCellNeighboursList() {
-    for (int cx = 0; cx < nx; cx++) {
-        for (int cy = 0; cy < ny; cy++) {
-            for (int cz = 0; cz < nz; cz++) {
-                int cellIndex = (cx * ny + cy) * nz + cz;
-                auto& neighbours = cellNeighbours[cellIndex];
-                neighbours.clear();
-                
-                for (int dx = -1; dx <= 1; dx++)
-                for (int dy = -1; dy <= 1; dy++)
-                for (int dz = -1; dz <= 1; dz++) {
-                    int nx_ = cx + dx;
-                    int ny_ = cy + dy;
-                    int nz_ = cz + dz;
-                    
-                    if (nx_ >= 0 && nx_ < nx && ny_ >= 0 && ny_ < ny && nz_ >= 0 && nz_ < nz) {
-                        int neighbourIndex = (nx_ * ny + ny_) * nz + nz_;
-                        neighbours.push_back(neighbourIndex);
-                    }
-                }
-            }
-        }
-    }
-}
 
 
 // Cluster Implementation

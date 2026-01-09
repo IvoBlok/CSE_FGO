@@ -88,13 +88,19 @@ std::chrono::microseconds FuzzyGlobalOptimizer::initializeCluster(DiscreteCluste
 
     float spawningRadius = params.spawningRadiusFactor * std::pow(params.numberOfAtoms, 0.33f);
 
-    std::vector<DiscreteCoord> randomPoints;
-    randomPoints.reserve(params.numberOfAtoms);
+    DiscretePoints randomPoints;
+    randomPoints.x.reserve(params.numberOfAtoms);
+    randomPoints.y.reserve(params.numberOfAtoms);
+    randomPoints.z.reserve(params.numberOfAtoms);
 
-    for (size_t i = 0; i < params.numberOfAtoms; i++)
-        randomPoints.emplace_back(getPointInBall(rng, spawningRadius, {0, 0, 0}));
-    
-    cluster = DiscreteCluster{params.numberOfAtoms, randomPoints, (int)(spawningRadius / params.gridSpacing), params.cutoffDistance * params.cutoffDistance, params.cellDistance};
+    for (size_t i = 0; i < params.numberOfAtoms; i++) {
+        auto point = getPointInBall(rng, spawningRadius, {0, 0, 0});
+        randomPoints.x.push_back(point[0]);
+        randomPoints.y.push_back(point[1]);
+        randomPoints.z.push_back(point[2]);
+    }
+
+    cluster = DiscreteCluster{randomPoints, (int)(spawningRadius / params.gridSpacing), params.cutoffDistance * params.cutoffDistance, params.cellDistance};
 
     return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - startTime);
 }
@@ -118,7 +124,7 @@ std::chrono::microseconds FuzzyGlobalOptimizer::runDMCLayer(RunState& state, con
             sumActive = 0, sumTarget = 0;
             for (size_t i = 0; i < params.numberOfAtoms; i++)
             {
-                const float E = walker.getAtomEnergy(i, lookup);
+                const float E = walker.getAtomEnergySlow(i, lookup);
                 atomEnergies[i] = E;
                 
                 const float wa = std::exp(E * dmcParams.invActiveEnergy);
@@ -288,7 +294,8 @@ void FuzzyGlobalOptimizer::localRealOptimization(std::pair<Cluster, float>& cand
 
 size_t FuzzyGlobalOptimizer::localDiscreteFrozenOptimization(DiscreteCluster& cluster, const size_t freeIndex) {
     DiscreteCoord freePoint = cluster.getAtom(freeIndex);
-    float oldAtomEnergy = cluster.getAtomEnergy(freeIndex, freePoint, lookup);
+    auto buffer = cluster.gatherNeighbourBuffer(freeIndex, freePoint);
+    float oldAtomEnergy = cluster.getAtomEnergy(freePoint, buffer, lookup);
 
     int stepsSinceChange, numChanges, axis;
     stepsSinceChange = numChanges = axis = 0;
@@ -296,8 +303,11 @@ size_t FuzzyGlobalOptimizer::localDiscreteFrozenOptimization(DiscreteCluster& cl
     while (stepsSinceChange < 3) {
         axis = (++axis) % 3;
 
+        if (numChanges % params.neighbourUpdateInterval == params.neighbourUpdateInterval - 1)
+            buffer = cluster.gatherNeighbourBuffer(freeIndex, freePoint);
+            
         freePoint[axis] += 1;
-        float newAtomEnergy = cluster.getAtomEnergy(freeIndex, freePoint, lookup);
+        float newAtomEnergy = cluster.getAtomEnergy(freePoint, buffer, lookup);
 
         if (newAtomEnergy < oldAtomEnergy) {
             oldAtomEnergy = newAtomEnergy;
@@ -307,7 +317,7 @@ size_t FuzzyGlobalOptimizer::localDiscreteFrozenOptimization(DiscreteCluster& cl
         }
 
         freePoint[axis] -= 2;
-        newAtomEnergy = cluster.getAtomEnergy(freeIndex, freePoint, lookup);
+        newAtomEnergy = cluster.getAtomEnergy(freePoint, buffer, lookup);
 
         if (newAtomEnergy < oldAtomEnergy) {
             oldAtomEnergy = newAtomEnergy;
@@ -326,7 +336,8 @@ size_t FuzzyGlobalOptimizer::localDiscreteFrozenOptimization(DiscreteCluster& cl
 }
 
 float FuzzyGlobalOptimizer::localDiscreteFrozenOptimization(DiscreteCluster& cluster, const size_t freeIndex, DiscreteCoord freePoint) {
-    float oldAtomEnergy = cluster.getAtomEnergy(freeIndex, freePoint, lookup);
+    auto buffer = cluster.gatherNeighbourBuffer(freeIndex, freePoint);
+    float oldAtomEnergy = cluster.getAtomEnergy(freePoint, buffer, lookup);
 
     int stepsSinceChange, numChanges, axis;
     stepsSinceChange = numChanges = axis = 0;
@@ -334,8 +345,11 @@ float FuzzyGlobalOptimizer::localDiscreteFrozenOptimization(DiscreteCluster& clu
     while (stepsSinceChange < 3) {
         axis = (++axis) % 3;
 
+        if (numChanges % params.neighbourUpdateInterval == params.neighbourUpdateInterval - 1)
+            buffer = cluster.gatherNeighbourBuffer(freeIndex, freePoint);
+
         freePoint[axis] += 1;
-        float newAtomEnergy = cluster.getAtomEnergy(freeIndex, freePoint, lookup);
+        float newAtomEnergy = cluster.getAtomEnergy(freePoint, buffer, lookup);
 
         if (newAtomEnergy < oldAtomEnergy) {
             oldAtomEnergy = newAtomEnergy;
@@ -345,7 +359,7 @@ float FuzzyGlobalOptimizer::localDiscreteFrozenOptimization(DiscreteCluster& clu
         }
 
         freePoint[axis] -= 2;
-        newAtomEnergy = cluster.getAtomEnergy(freeIndex, freePoint, lookup);
+        newAtomEnergy = cluster.getAtomEnergy(freePoint, buffer, lookup);
 
         if (newAtomEnergy < oldAtomEnergy) {
             oldAtomEnergy = newAtomEnergy;

@@ -28,64 +28,50 @@ struct DiscretePoints {
 };
 
 using DiscreteCoord = std::array<int32_t, 3>;
-
-struct alignas(64) CellData {
-    std::array<int32_t, 16> cellX;
-    std::array<int32_t, 16> cellY;
-    std::array<int32_t, 16> cellZ;
-    std::array<int32_t, 16> cellID;
-};
-
-struct AtomIndex {
-    int cell;
-    int slot;
-};
+using CellData = std::vector<uint32_t>;
 
 struct DiscreteCluster {
 public:
-    alignas(64) std::vector<CellData> cellData;
-    std::vector<std::vector<int>> cellNeighbours;
-    std::vector<int> cellLengths; // number of non-padding elements in the cell
-    std::vector<AtomIndex> atomIndices; // go from atom i [0, n] to an index of that atom into cellX,Y,Z,ID
+    std::vector<int32_t> x, y, z;
     size_t n;
 
-    int32_t minX, minY, minZ, maxX, maxY, maxZ;
-    int nx, ny, nz;
+    std::vector<CellData> cells;
+    std::vector<std::vector<uint32_t>> cellNeighbours;
+    std::vector<uint32_t> atomCell; // maps from atom index to the cell it is a member of
+    int32_t minCells;
+    size_t nCells;
 
     float INV_CELL_SIZE;
     int CUTOFF2;
 
 public:
     DiscreteCluster() = default;
-    explicit DiscreteCluster(const size_t numberOfPoints, const std::vector<DiscreteCoord>& points, int DISCRETE_RADIUS , int CUTOFF2, int CELL_SIZE);
-    explicit DiscreteCluster(const DiscretePoints& points, int DISCRETE_RADIUS , int CUTOFF2, int CELL_SIZE);
+    explicit DiscreteCluster(DiscretePoints& points, int DISCRETE_RADIUS , int CUTOFF2, int CELL_SIZE);
 
     DiscreteCoord getAtom(size_t atom) const;
     void updateAtom(size_t atom, DiscreteCoord point);
 
-    float getAtomEnergy(size_t atom, DiscreteCoord point, const std::vector<float>& lookup) const;
-    float getAtomEnergy(size_t atom, const std::vector<float>& lookup) const;
+    DiscretePoints gatherNeighbourBuffer(size_t freeAtom, DiscreteCoord point) const;
+
+    float getAtomEnergy(DiscreteCoord point, const DiscretePoints& neighbours, const std::vector<float>& lookup) const;
+    float getAtomEnergy(size_t atom, const DiscretePoints& neighbours, const std::vector<float>& lookup) const;
+    float getAtomEnergySlow(size_t atom, const std::vector<float>& lookup) const;
     float getClusterEnergy(const std::vector<float>& lookup) const;
 
     DiscretePoints exportPoints() const;
 
 private:
     inline int cellIndexFromCoord(int32_t px, int32_t py, int32_t pz) const {
-        int cx = static_cast<int>((px - minX) * INV_CELL_SIZE);
-        int cy = static_cast<int>((py - minY) * INV_CELL_SIZE);
-        int cz = static_cast<int>((pz - minZ) * INV_CELL_SIZE);
+        int cx = static_cast<int>((px - minCells) * INV_CELL_SIZE);
+        int cy = static_cast<int>((py - minCells) * INV_CELL_SIZE);
+        int cz = static_cast<int>((pz - minCells) * INV_CELL_SIZE);
 
-        //if (cx < 0 || cx > nx - 1 || cy < 0 || cy > ny - 1 || cz < 0 || cz > nz - 1)
-        //    throw std::runtime_error("point is outside domain of cluster; either implement some moving window, recenter the structure, or make the domain larger by default");
-
-        return (cx * ny + cy) * nz + cz;
+        return (cx * nCells + cy) * nCells + cz;
     }
 
     inline int cellIndexFromCoord(DiscreteCoord point) const {
         return cellIndexFromCoord(point[0], point[1], point[2]);
     }
-
-    void initializeCellNeighboursList();
 };
 
 
