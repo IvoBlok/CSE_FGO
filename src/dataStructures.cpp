@@ -99,9 +99,9 @@ DiscretePoints DiscreteCluster::gatherNeighbourBuffer(size_t freeAtom, DiscreteC
 
     int centerCell = cellIndexFromCoord(point);
 
-    for (auto neighbourCell : cellNeighbours[centerCell])
+    for (const auto& neighbourCell : cellNeighbours[centerCell])
     {
-        for (auto atom : cells[neighbourCell])
+        for (const auto& atom : cells[neighbourCell])
         {
             if (freeAtom == atom) continue; // skip self, such that energy calculations don't take the contribution from self relative to self into consideration
 
